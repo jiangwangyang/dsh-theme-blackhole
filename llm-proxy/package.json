@@ -1,0 +1,11 @@
+{
+  "name": "dsh-llm-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "description": "Env-var proxy plugin for the DeepSeek Harness: routes LLM API fetch() calls through HTTP_PROXY/HTTPS_PROXY/NO_PROXY. Load with: dsh web --patch cordis.patch.yml",
+  "dependencies": {
+    "undici": "^7.28.0"
+  }
+}
