@@ -1,10 +1,10 @@
 /**
- * dsh-llm-proxy — 环境变量代理插件（Host 半边）
+ * dsh-proxy — 环境变量代理插件（Host 半边）
  *
  * 通过 undici 的 EnvHttpProxyAgent 读取 HTTP_PROXY / HTTPS_PROXY / NO_PROXY
- * 环境变量，并将其设为全局 dispatcher。Harness 的 LLM 适配器（DeepSeek、
- * Pi-AI 等）底层均使用 Node.js 全局 fetch()，而全局 fetch 由 undici 的
- * 全局 dispatcher 驱动，因此本插件可让所有大模型 API 请求默认走代理。
+ * 环境变量，并将其设为全局 dispatcher。Node.js 全局 fetch() 由 undici 的
+ * 全局 dispatcher 驱动，因此本插件让进程内所有 fetch() 请求（LLM 适配器的
+ * 大模型 API 请求、web_search 等）默认走代理——它不针对某个具体服务。
  *
  *   - HTTP_PROXY  / http_proxy   HTTP  请求代理
  *   - HTTPS_PROXY / https_proxy  HTTPS 请求代理
@@ -16,7 +16,7 @@
 import { EnvHttpProxyAgent, getGlobalDispatcher, setGlobalDispatcher } from 'undici'
 
 /** Stable Cordis plugin name. */
-export const name = 'llm-proxy'
+export const name = 'proxy'
 
 /**
  * 读取并规范化当前进程的代理环境变量，仅用于启动日志展示。
@@ -38,10 +38,10 @@ export function apply(ctx) {
   const { httpProxy, httpsProxy, noProxy } = readProxyEnv()
 
   if (!httpProxy && !httpsProxy) {
-    console.log('[llm-proxy] no HTTP_PROXY/HTTPS_PROXY env vars set — plugin active, direct connections used')
+    console.log('[proxy] no HTTP_PROXY/HTTPS_PROXY env vars set — plugin active, direct connections used')
   } else {
     console.log(
-      `[llm-proxy] env proxy detected —`
+      `[proxy] env proxy detected —`
       + ` HTTP_PROXY=${httpProxy || '(unset)'}`
       + `, HTTPS_PROXY=${httpsProxy || '(unset)'}`
       + `, NO_PROXY=${noProxy || '(unset)'}`,
@@ -55,13 +55,13 @@ export function apply(ctx) {
     () => {
       const previous = getGlobalDispatcher()
       setGlobalDispatcher(new EnvHttpProxyAgent())
-      console.log('[llm-proxy] global dispatcher replaced with EnvHttpProxyAgent')
+      console.log('[proxy] global dispatcher replaced with EnvHttpProxyAgent')
 
       return () => {
         setGlobalDispatcher(previous)
-        console.log('[llm-proxy] restored previous global dispatcher')
+        console.log('[proxy] restored previous global dispatcher')
       }
     },
-    'llm-proxy: global proxy dispatcher',
+    'proxy: global proxy dispatcher',
   )
 }

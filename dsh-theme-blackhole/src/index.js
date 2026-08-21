@@ -1,5 +1,5 @@
 /**
- * dsh-blackhole-theme — 黑洞主题插件（Host 半边）
+ * dsh-theme-blackhole — 黑洞主题插件（Host 半边）
  *
  * 通过 webServer 服务 /blackhole/* 静态资源，并以 tapIndex 把它们注入
  * Web UI 的每个 index.html 响应：
@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** Stable Cordis plugin name. */
-export const name = 'blackhole-theme'
+export const name = 'theme-blackhole'
 
 /** 本插件对外服务的静态资源表：URL 路径 → 相对文件名与 MIME 类型。 */
 const ASSETS = {
@@ -78,12 +78,12 @@ export function apply(ctx) {
   ctx.inject(['webServer'], (httpCtx) => {
     httpCtx.effect(
       () => httpCtx.webServer.register({ kind: 'prefix', path: '/blackhole', handler: serveAsset }),
-      'blackhole-theme: asset route',
+      'theme-blackhole: asset route',
     )
     httpCtx.effect(
       () => httpCtx.webServer.tapIndex(injectThemeAssets),
-      'blackhole-theme: index injection',
+      'theme-blackhole: index injection',
     )
   })
-  console.log('[blackhole-theme] loaded — WebGL black hole background armed')
+  console.log('[theme-blackhole] loaded — WebGL black hole background armed')
 }

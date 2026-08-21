@@ -1,0 +1,6 @@
+# dsh-theme-blackhole bundle patch: 黑洞主题。依赖 web profile 的 webServer
+# 服务（插件内通过 ctx.inject(['webServer'], ...) 等待其就绪），仅适用于
+# 含 webserver 的 profile（如 web），不要装进 headless。
+- insert:
+    - id: theme-blackhole
+      name: 'dsh-theme-blackhole'

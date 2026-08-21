@@ -1,8 +1,0 @@
-{
-  "name": "dsh-blackhole-theme",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "main": "src/index.js",
-  "description": "Black hole theme plugin for the DeepSeek Harness Web UI: WebGL Schwarzschild black hole background with deep-space glass panels. Load with: dsh web --patch cordis.patch.yml"
-}
