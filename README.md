@@ -6,7 +6,7 @@
 
 English | [中文](README.zh-CN.md)
 
-A black hole theme plugin for the dsh (DeepSeek Harness) Web UI: a WebGL real-time ray-traced Schwarzschild black hole as the application background, paired with a deep-space glass panel palette, switchable from Settings > General > Theme - Black Hole.
+A black hole theme plugin for the DeepSeek Harness (dsh) Web UI: a WebGL real-time ray-traced Schwarzschild black hole as the application background, paired with a deep-space glass panel palette, switchable from Settings > General > Theme - Black Hole.
 
 ![hero](docs/screenshots/blackhole.png)
 
