@@ -1,6 +1,0 @@
-# dsh-proxy bundle patch: 把全局 fetch 的 dispatcher 替换为 undici
-# EnvHttpProxyAgent，让进程内所有 fetch() 请求（LLM API、web_search 等）
-# 走 HTTP_PROXY/HTTPS_PROXY/NO_PROXY 环境变量配置的代理。
-- insert:
-    - id: proxy
-      name: 'dsh-proxy'
