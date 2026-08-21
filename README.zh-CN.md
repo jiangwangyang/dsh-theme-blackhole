@@ -8,7 +8,7 @@
 
 dsh（DeepSeek Harness）Web UI 的黑洞主题插件：以 WebGL 实时光线追踪的史瓦西黑洞作为应用背景，配合深空玻璃质感的面板调色板，从 设置 > 通用 > 主题-黑洞 一键切换。
 
-<!-- 截图占位：此处添加主题效果截图 -->
+![hero](docs/screenshots/blackhole.png)
 
 ## 特性
 
@@ -19,7 +19,7 @@ dsh（DeepSeek Harness）Web UI 的黑洞主题插件：以 WebGL 实时光线�
 
 ## 安装
 
-本插件依赖 web profile 的 webServer 服务，仅适用于含 webserver 的 profile（如 web），**不要装进 headless**。
+本插件依赖 web profile 的 webServer 服务，仅适用于含 webserver 的 profile（如 web）， **不要装进 headless**。
 
 ```bash
 dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
@@ -39,12 +39,12 @@ dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
 
 插件分为 Host 半边与客户端半边，加上两份静态资源：
 
-| 部分 | 文件 | 职责 |
-| --- | --- | --- |
-| Host 半边 | `src/index.js` | 服务 `/blackhole/*` 静态资源（按请求读盘）；注册 `theme-blackhole` 设置命名空间；开关为开时向 index.html 注入首屏引导 |
-| 客户端半边 | `src/client/index.js` | 免构建 client bundle：把黑洞主题注册进 ThemeRuntime，注册设置行，按主题激活状态启停 DOM 视觉 |
-| 调色板 | `assets/blackhole.css` | `html[data-dsh-blackhole]` 门控的 `--dsw-*` 设计令牌覆写 |
-| 渲染器 | `assets/blackhole.js` | 史瓦西黑洞 WebGL 渲染器，仅暴露 `window.DshBlackhole = { start, stop }` 控制器 |
+| 部分       | 文件                   | 职责                                                                                                                  |
+|------------|------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| Host 半边  | `src/index.js`         | 服务 `/blackhole/*` 静态资源（按请求读盘）；注册 `theme-blackhole` 设置命名空间；开关为开时向 index.html 注入首屏引导 |
+| 客户端半边 | `src/client/index.js`  | 免构建 client bundle：把黑洞主题注册进 ThemeRuntime，注册设置行，按主题激活状态启停 DOM 视觉                          |
+| 调色板     | `assets/blackhole.css` | `html[data-dsh-blackhole]` 门控的 `--dsw-*` 设计令牌覆写                                                              |
+| 渲染器     | `assets/blackhole.js`  | 史瓦西黑洞 WebGL 渲染器，仅暴露 `window.DshBlackhole = { start, stop }` 控制器                                        |
 
 ### 首屏引导与门控机制
 

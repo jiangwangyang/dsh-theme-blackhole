@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 A black hole theme plugin for the dsh (DeepSeek Harness) Web UI: a WebGL real-time ray-traced Schwarzschild black hole as the application background, paired with a deep-space glass panel palette, switchable from Settings > General > Theme - Black Hole.
 
-<!-- Screenshot placeholder: add theme screenshots here -->
+![hero](docs/screenshots/blackhole.png)
 
 ## Features
 
@@ -39,12 +39,12 @@ After installing and starting, go to **Settings > General > Theme - Black Hole**
 
 The plugin consists of a host side and a client side, plus two static assets:
 
-| Part | File | Responsibility |
-| --- | --- | --- |
-| Host side | `src/index.js` | Serves `/blackhole/*` static assets (read from disk per request); registers the `theme-blackhole` settings namespace; injects boot assets into index.html when the toggle is on |
-| Client side | `src/client/index.js` | Build-free client bundle: registers the black hole theme into the ThemeRuntime, registers the settings row, and drives the DOM visuals according to theme activation |
-| Palette | `assets/blackhole.css` | `--dsw-*` design token overrides gated by `html[data-dsh-blackhole]` |
-| Renderer | `assets/blackhole.js` | Schwarzschild black hole WebGL renderer, exposing only the `window.DshBlackhole = { start, stop }` controller |
+| Part        | File                   | Responsibility                                                                                                                                                                  |
+|-------------|------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Host side   | `src/index.js`         | Serves `/blackhole/*` static assets (read from disk per request); registers the `theme-blackhole` settings namespace; injects boot assets into index.html when the toggle is on |
+| Client side | `src/client/index.js`  | Build-free client bundle: registers the black hole theme into the ThemeRuntime, registers the settings row, and drives the DOM visuals according to theme activation            |
+| Palette     | `assets/blackhole.css` | `--dsw-*` design token overrides gated by `html[data-dsh-blackhole]`                                                                                                            |
+| Renderer    | `assets/blackhole.js`  | Schwarzschild black hole WebGL renderer, exposing only the `window.DshBlackhole = { start, stop }` controller                                                                   |
 
 ### Boot Injection and Gating
 
