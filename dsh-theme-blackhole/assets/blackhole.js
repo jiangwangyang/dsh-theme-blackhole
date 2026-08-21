@@ -5,6 +5,8 @@
 // 倍窗口尺寸，半分辨率渲染兼顾性能与清晰度。
 // 本脚本自建全屏画布层（z-index:-1，内容之下），WebGL 不可用或着色器编译
 // 失败时隐藏画布层，由 body 上的降级底色（纯黑 + 微弱吸积盘橙晕）透出。
+// 本脚本不自动启动：仅暴露 window.DshBlackhole = { start, stop } 控制器，
+// 由客户端半边按主题激活状态启停，重复 start/stop 幂等。
 // ==========================================
 (function () {
   'use strict'
@@ -244,9 +246,8 @@
   var bh = { running: false, raf: null, canvas: null, gl: null, U: null, simT: 0, prevT: 0, yaw: BH_YAW0, ready: false, failed: false }
 
   // ===== 4. 画布层挂载 =====
-  // 自建全屏固定层（z-index:-1，位于应用内容之下、body 底色之上），
-  // 并给 body 打上深色主题标记：即便存储偏好为浅色，也保证深空底色不闪白
-  // （调色板本体由 blackhole.css 的令牌覆写承载，此处标记只作双保险）。
+  // 自建全屏固定层（位于 body 底色之上、#root 之下）；深色基调由
+  // html[data-dsh-blackhole] 门控的 blackhole.css 与主题系统承载，此处不再染指。
   function mountLayer() {
     var existing = document.getElementById('dsh-blackhole-layer')
     if (existing) {
@@ -259,8 +260,6 @@
     canvas.id = 'dsh-blackhole-canvas'
     layer.appendChild(canvas)
     document.body.prepend(layer)
-    document.body.setAttribute('data-ds-dark-theme', '')
-    document.documentElement.style.colorScheme = 'dark'
     return canvas
   }
 
@@ -430,12 +429,33 @@
     bh.raf = requestAnimationFrame(tickBlackhole)
   }
 
-  // ===== 8. 启动入口 =====
-  // 本脚本以 defer 注入：DOM 解析完成、应用模块之前执行；
-  // 兜底等待 DOMContentLoaded，确保 body 存在
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startBlackhole)
-  } else {
-    startBlackhole()
+  // ===== 8. 停止与控制器导出 =====
+  // 停止黑洞渲染：取消 RAF 循环、解绑缩放监听、销毁 GL 上下文并移除画布层；
+  // 重置初始化标记，下次 start 重新建层与编译着色器（failed 标记保留，
+  // WebGL 不可用的环境不会无谓重试）
+  function stopBlackhole() {
+    bh.running = false
+    if (bh.raf !== null) {
+      cancelAnimationFrame(bh.raf)
+      bh.raf = null
+    }
+    window.removeEventListener('resize', resizeBlackhole)
+    if (bh.gl !== null) {
+      var lose = bh.gl.getExtension('WEBGL_lose_context')
+      if (lose) {
+        lose.loseContext()
+      }
+    }
+    var layer = document.getElementById('dsh-blackhole-layer')
+    if (layer) {
+      layer.remove()
+    }
+    bh.canvas = null
+    bh.gl = null
+    bh.U = null
+    bh.ready = false
   }
+
+  // 控制器导出：客户端半边按主题激活状态调用；脚本只加载一次
+  window.DshBlackhole = { start: startBlackhole, stop: stopBlackhole }
 })()

@@ -1,17 +1,22 @@
 /**
  * dsh-theme-blackhole — 黑洞主题插件（Host 半边）
  *
- * 通过 webServer 服务 /blackhole/* 静态资源，并以 tapIndex 把它们注入
- * Web UI 的每个 index.html 响应：
- *   - /blackhole/blackhole.css  深空玻璃调色板（--dsw-* 设计令牌覆写）
- *   - /blackhole/blackhole.js   史瓦西黑洞 WebGL 背景渲染器
+ * 职责：
+ *   1. 通过 webServer 服务 /blackhole/* 静态资源（按请求读盘，改动后刷新即生效）：
+ *      /blackhole/blackhole.css  深空玻璃调色板（html[data-dsh-blackhole] 门控的 --dsw-* 覆写）
+ *      /blackhole/blackhole.js   史瓦西黑洞 WebGL 渲染器（window.DshBlackhole 控制器）
+ *   2. 注册本插件自有的设置命名空间 theme-blackhole（enabled 开关，默认关），
+ *      客户端半边的 "主题-黑洞" 设置行通过它持久化选择。
+ *   3. tapIndex 首屏引导：仅当开关为开时，向 index.html 注入激活标记、样式表
+ *      与渲染器，避免 client 插件加载前闪默认主题；开关为关时不注入任何东西。
  *
- * 视觉完全由这两个浏览器资源承载：不依赖客户端插件包，也不用改动
- * monorepo 内置的 ui-theme。资源按请求读盘，改动后浏览器刷新即生效。
+ * 主题的注册、设置行与视觉生命周期全部由客户端半边（src/client/index.js）承担：
+ * 黑洞主题 id 不进入 ui-theme 的内置设置 schema，这是 dsh 对第三方主题保留的边界。
  */
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import z from '@deepseek-ai/schemastery'
 
 /** Stable Cordis plugin name. */
 export const name = 'theme-blackhole'
@@ -25,15 +30,41 @@ const ASSETS = {
 /** 资源目录（本文件位于 src/，资源位于 ../assets/）。 */
 const ASSET_DIR = fileURLToPath(new URL('../assets/', import.meta.url))
 
+/** 本插件自有的设置命名空间：黑洞主题开关。
+ * 字面量而非 settingsNamespace()：插件以 link: 安装时裸包说明符无法从
+ * 真实路径解析，Host 半边的运行时外部依赖只保留 schemastery 一个。 */
+const BLACKHOLE_NAMESPACE = 'theme-blackhole'
+
+/** 开关命名空间的持久化 schema：enabled 默认关。 */
+const BlackholeSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+})
+
 /**
- * 把主题资源标签注入 index.html 的 </head> 之前：vite 把应用样式表以
- * <link> 注入 head，紧随其后追加本主题样式，同等特异性下级联胜出；
- * 脚本 defer，在 DOM 解析完成后、应用模块脚本之前挂载黑洞画布。
+ * 读取持久化的开关状态；无 settings 服务或命名空间缺省时视为关闭
+ * （关闭即不注入，激活交给客户端半边在运行时决定）。
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host 插件上下文。
+ * @returns {boolean} 黑洞主题是否被持久化为开启。
+ */
+function readEnabled(ctx) {
+  const settings = ctx.get('settings')
+  if (settings === undefined) return false
+  const section = settings.get(BLACKHOLE_NAMESPACE)
+  return section !== undefined && section.enabled === true
+}
+
+/**
+ * 首屏引导注入（仅开关为开时）：在 </head> 之前写入 html 激活标记（让
+ * blackhole.css 的门控选择器立即生效）、样式表 link（携带同名标记，客户端
+ * 半边激活时认领而非重复插入）与 defer 的渲染器脚本（仅定义控制器，不自动启动）。
  * @param {string} html - 原始 index HTML。
+ * @param {boolean} enabled - 持久化的开关状态。
  * @returns {string} 注入资源标签后的 HTML。
  */
-function injectThemeAssets(html) {
-  const tags = '<link rel="stylesheet" href="/blackhole/blackhole.css">'
+function injectBootAssets(html, enabled) {
+  if (!enabled) return html
+  const tags = '<script>document.documentElement.setAttribute("data-dsh-blackhole", "")</script>'
+    + '<link rel="stylesheet" href="/blackhole/blackhole.css" data-dsh-blackhole="">'
     + '<script defer src="/blackhole/blackhole.js"></script>'
   const close = html.search(/<\/head>/i)
   if (close === -1) return `${html}${tags}`
@@ -70,20 +101,24 @@ async function serveAsset(req, res) {
 }
 
 /**
- * 挂载黑洞主题：注册 /blackhole 前缀路由并给每个 index.html 响应注入
- * 资源标签。等待 webServer 服务就绪后生效，插件卸载时自动回收。
+ * 挂载黑洞主题 Host 半边：注册设置命名空间、/blackhole 前缀路由，并按持久化
+ * 开关向 index.html 注入首屏引导。等待 settings/webServer 服务就绪后生效，
+ * 插件卸载时自动回收。
  * @param {import('@deepseek-ai/cordis').Context} ctx - Host 插件上下文。
  */
 export function apply(ctx) {
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.register(BLACKHOLE_NAMESPACE, BlackholeSettingsSchema)
+  })
   ctx.inject(['webServer'], (httpCtx) => {
     httpCtx.effect(
       () => httpCtx.webServer.register({ kind: 'prefix', path: '/blackhole', handler: serveAsset }),
       'theme-blackhole: asset route',
     )
     httpCtx.effect(
-      () => httpCtx.webServer.tapIndex(injectThemeAssets),
-      'theme-blackhole: index injection',
+      () => httpCtx.webServer.tapIndex(html => injectBootAssets(html, readEnabled(ctx))),
+      'theme-blackhole: boot injection',
     )
   })
-  console.log('[theme-blackhole] loaded — WebGL black hole background armed')
+  console.log('[theme-blackhole] loaded — 设置 > 通用 > 主题-黑洞 开关控制黑洞主题')
 }

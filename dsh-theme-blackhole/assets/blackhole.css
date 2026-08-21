@@ -2,13 +2,12 @@
    dsh 黑洞主题 — 深空玻璃调色板
    覆写 Web UI 的 --dsw-* 设计令牌：面板改为半透明深色玻璃，让
    blackhole.js 的 WebGL 黑洞背景从内容之下透出；品牌强调色改为
-   吸积盘琥珀。light / dark 两个分支写入同一组值，外观设置切到
-   浅色也不改变观感。本表在 </head> 前注入，位于应用样式表之后，
-   同等特异性下级联胜出。
+   吸积盘琥珀。全部规则由 html[data-dsh-blackhole] 门控，外观设置切到
+   浅色/深色/跟随系统后默认调色板完整恢复，无残留覆写。
    ========================================== */
 
-/* 深色渲染基调 + shiki 暗色代码高亮（无论存储偏好如何都取暗色值） */
-:root {
+/* 深色渲染基调 + shiki 暗色代码高亮（仅黑洞主题激活时生效） */
+html[data-dsh-blackhole] {
   color-scheme: dark;
   --shiki-foreground: rgb(233, 237, 248);
   --shiki-background: rgba(4, 6, 13, 0.84);
@@ -27,7 +26,7 @@
    画布层 z-index:0 位于 body 背景之上、#root 之下；#root 的
    backdrop-filter 模糊身后的画布，半透明面板透过模糊后的黑洞透出。
    与 openagents 一致：模糊在面板层，不在 body 上。 */
-html {
+html[data-dsh-blackhole] {
   background: #030309;
 }
 
@@ -43,7 +42,7 @@ html {
 /* #root 提升到画布之上并施加毛玻璃模糊：backdrop-filter 模糊 z-index:0
    的画布层，应用内半透明面板透过 #root 的模糊背景看到柔焦后的黑洞。
    position:relative + z-index:1 创建新堆叠上下文，保证全部应用内容在画布之上。 */
-#root {
+html[data-dsh-blackhole] #root {
   position: relative;
   z-index: 1;
   backdrop-filter: blur(16px);
@@ -56,9 +55,8 @@ html {
   height: 100%;
 }
 
-/* ---- 令牌覆写：body 与 body[data-ds-dark-theme] 同值 ---- */
-body,
-body[data-ds-dark-theme] {
+/* ---- 令牌覆写：特异性高于 body[data-ds-dark-theme] 的暗色基底 ---- */
+html[data-dsh-blackhole] body {
   /* 背景：分层玻璃，越靠上的层越不透明（菜单/弹层需保证可读性） */
   --dsw-alias-bg-base: rgba(4, 5, 11, 0.30);
   --dsw-alias-bg-layer-1: rgba(9, 11, 20, 0.42);
