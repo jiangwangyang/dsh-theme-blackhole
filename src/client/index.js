@@ -4,7 +4,7 @@
 // dsh 客户端模块系统的既定契约：执行 bundle 仅注册工厂
 //（window.__ModuleLoader__.load({ id, factory })），模块体副作用在工厂
 // 物化时运行；factory 收到的 require 由模块表应答，基线 specifier 含
-// 'react' 与 '@deepseek-ai/dsh-client-runtime/client'，因此本文件直接作为
+// 'react' 与 '@deepseek-ai/dsh-client-store'，因此本文件直接作为
 // client bundle 提供（package.json exports["./client"]），无需构建步骤。
 //
 // 职责：
@@ -22,7 +22,7 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     'use strict'
     const React = require('react')
-    const { defineStore } = require('@deepseek-ai/dsh-client-runtime/client')
+    const { defineStore } = require('@deepseek-ai/dsh-client-store')
 
     /** 注册进 ThemeRuntime 的主题 id。 */
     const THEME_ID = 'blackhole'
