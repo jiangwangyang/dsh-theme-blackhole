@@ -16,6 +16,10 @@
 //   4. 开关状态持久化在本插件自有命名空间 theme-blackhole.enabled（Host 半边
 //      注册 schema）——黑洞主题 id 不进入 ui-theme 的内置设置 schema，
 //      这是 dsh 对第三方主题保留的边界。
+//   5. 仲裁主题偏好归属：ui-settings 的共享镜像在每次 settings/document-updated
+//      后全量重读，会触发 ui-theme adopt 把偏好压回其持久化的内置值；
+//      以 ui-theme 持久化 section 的 preference 是否变化区分该碾压与用户在
+//      外观行的主动切换，前者重新断言黑洞，后者让位并回写开关为关。
 // ==========================================
 window.__ModuleLoader__.load({
   id: 'dsh-theme-blackhole',
@@ -33,6 +37,9 @@ window.__ModuleLoader__.load({
     /** 本插件自有的设置命名空间与开关字段（Host 半边注册 schema）。 */
     const SETTINGS_NAMESPACE = 'theme-blackhole'
     const ENABLED_FIELD = 'enabled'
+
+    /** ui-theme 的持久化命名空间（只读观察，仲裁基准；字面量理由同 Host 半边）。 */
+    const UI_THEME_NAMESPACE = 'ui-theme'
 
     /** 激活标记：html 属性门控 blackhole.css；link 标签携带同名标记便于认领。 */
     const MARK = 'data-dsh-blackhole'
@@ -95,11 +102,27 @@ window.__ModuleLoader__.load({
         },
       })
 
+      // ui-theme 的只读观察：adopt 碾压把偏好压回持久化值且 section 不变；
+      // 用户在外观行主动切换会真实改变 section.preference
+      const uiThemeScope = ctx.settingsScope.bind({
+        namespace: UI_THEME_NAMESPACE,
+        decode: (section) => {
+          if (typeof section !== 'object' || section === null || Array.isArray(section)) return undefined
+          return typeof section.preference === 'string' ? { preference: section.preference } : undefined
+        },
+      })
+
       let active = false
       let scriptLoading = false
       // 最近的内置偏好：关闭开关时恢复它；黑洞偏好不落盘 ui-theme 命名空间，
       // 用户的浅色/深色/跟随系统选择不会因开关而丢失
       let lastBuiltin
+      // 最近见到的 ui-theme 持久化偏好（仲裁基准；首次观察只记录不判定）
+      let lastPersisted
+      // 让位写回 enabled=false 尚未落盘的窗口：抑制一切重新断言
+      let pendingOff = false
+      // 设置行 store 的本地单调计数（store 改由本插件 scope 驱动）
+      let rowRevision = 0
 
       /**
        * 按激活状态同步 DOM：html 属性、样式表 link 与 WebGL 渲染器。
@@ -151,24 +174,55 @@ window.__ModuleLoader__.load({
       }
 
       /**
-       * 以持久化开关为准协调主题偏好：开则断言黑洞，关且正占用偏好则交还。
-       * 启动时 ui-theme 采纳其持久化偏好可能覆盖黑洞；本 scope 与 ui-theme 的
-       * scope 派生自同一设置镜像，订阅顺序即插件激活顺序（本插件声明依赖 theme
-       * 服务，激活必晚于 ui-theme），因此这里的断言必然落在采纳之后。
+       * 以持久化开关为准协调主题偏好与设置行：开关镜像进 store；开则在偏好被
+       * 压回持久化内置值（adopt 碾压的签名）时重新断言黑洞，关且正占用偏好则
+       * 交还。与持久化值不同的偏好是用户尚未落盘的主动切换，交给仲裁让位。
        */
       const reconcile = () => {
         const section = scope.getSnapshot().value
         if (section === undefined) return
+        if (!section.enabled) pendingOff = false
+        if (bound !== undefined) bound.sync(section.enabled, ++rowRevision)
         const preference = ctx.theme.getTheme().preference
         if (section.enabled) {
-          if (preference !== THEME_ID) ctx.theme.setTheme(THEME_ID)
+          if (!pendingOff && preference !== THEME_ID && preference === lastPersisted) {
+            ctx.theme.setTheme(THEME_ID)
+          }
         } else if (preference === THEME_ID) {
           restoreBuiltin()
         }
       }
       ctx.effect(() => scope.subscribe(reconcile), 'theme-blackhole: settings adoption')
 
-      // 设置行 store：theme 快照的镜像，onThemeChange 是唯一写者
+      /**
+       * 仲裁偏好归属：ui-theme 持久化偏好变化 = 用户在外观行主动切换，让位并
+       * 回写开关为关；section 不变而偏好被压离黑洞 = 共享镜像全量重读引发的
+       * adopt 碾压，重新断言（与碾压同在同一个同步发布段，两次 DOM 翻转之间
+       * 无绘制）。已知边界：黑洞激活时点击恰好等于持久化值的内置主题会被视为
+       * 碾压而覆盖，需用开关关闭——不改动 dsh 前提下该场景无法区分。
+       */
+      ctx.effect(() => uiThemeScope.subscribe(() => {
+        const section = uiThemeScope.getSnapshot().value
+        if (section === undefined) return
+        if (lastPersisted === undefined) {
+          // 首次观察：只记录基准，不判定为用户切换
+          lastPersisted = section.preference
+        } else if (section.preference !== lastPersisted) {
+          lastPersisted = section.preference
+          if (scope.getSnapshot().value?.enabled === true) {
+            pendingOff = true
+            void scope.set(ENABLED_FIELD, false)
+          }
+          return
+        }
+        if (!pendingOff
+          && scope.getSnapshot().value?.enabled === true
+          && ctx.theme.getTheme().preference !== THEME_ID) {
+          ctx.theme.setTheme(THEME_ID)
+        }
+      }), 'theme-blackhole: ui-theme adoption arbitration')
+
+      // 设置行 store：持久化开关的镜像，reconcile（本插件 scope 订阅）是唯一写者
       const store = defineStore({
         init: () => ({ enabled: false, revision: -1 }),
         actions: {
@@ -181,20 +235,17 @@ window.__ModuleLoader__.load({
       })
       let bound
 
+      // 偏好变化只驱动 DOM 与 lastBuiltin；开关归属由仲裁与本插件 scope 决定，
+      // 不再在此回写（adopt 碾压与用户主动切换在本事件上无法区分）
       ctx.on('theme/change', (snapshot) => {
-        const on = snapshot.preference === THEME_ID
-        if (!on) lastBuiltin = snapshot.preference
-        syncDom(on)
-        if (bound !== undefined) bound.sync(on, snapshot.revision)
-        // 偏好被外观行切回内置主题：回写开关为关，让两处设置保持一致。
-        // 启动时 ui-theme 采纳持久化偏好的覆盖发生在本 scope 派生之前
-        //（value 为 undefined），不会误写；重连 refetch 造成的同类覆盖会
-        // 让位并回写为关——重连罕见且服务重启后页面通常整体重载，可接受
-        if (!on && scope.getSnapshot().value?.enabled === true) void scope.set(ENABLED_FIELD, false)
+        if (snapshot.preference !== THEME_ID) lastBuiltin = snapshot.preference
+        syncDom(snapshot.preference === THEME_ID)
       })
 
-      // 开关手势：立即切换主题，并持久化开关状态（远程浏览器进程内生效）
+      // 开关手势：立即切换主题，并持久化开关状态（远程浏览器进程内生效）；
+      // 手动手势终结让位窗口
       const setEnabled = (on) => {
+        pendingOff = false
         void scope.set(ENABLED_FIELD, on)
         if (on) ctx.theme.setTheme(THEME_ID)
         else restoreBuiltin()
@@ -217,9 +268,8 @@ window.__ModuleLoader__.load({
         locale: LOCALE_NS,
         inject: (actions) => {
           bound = actions
-          // 从 getter 重新同步，不丢注册与首渲染之间的事件（revision 守卫去重）
-          const snapshot = ctx.theme.getTheme()
-          bound.sync(snapshot.preference === THEME_ID, snapshot.revision)
+          // 从 scope 重新同步，不丢注册与首渲染之间的变化（revision 守卫去重）
+          bound.sync(scope.getSnapshot().value?.enabled === true, ++rowRevision)
           return { setEnabled }
         },
       }, BlackholeRow))
