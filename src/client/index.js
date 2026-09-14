@@ -20,6 +20,9 @@
 //      后全量重读，会触发 ui-theme adopt 把偏好压回其持久化的内置值；
 //      以 ui-theme 持久化 section 的 preference 是否变化区分该碾压与用户在
 //      外观行的主动切换，前者重新断言黑洞，后者让位并回写开关为关。
+//   6. 回写外部激活：插件市场等第三方直接 setTheme('blackhole') 时，
+//      偏好的变化方向无歧义（adopt 碾压只压向内置值），回写开关为开，
+//      让设置行、首屏引导注入与碾压后的重新断言全部跟上。
 // ==========================================
 window.__ModuleLoader__.load({
   id: 'dsh-theme-blackhole',
@@ -235,11 +238,23 @@ window.__ModuleLoader__.load({
       })
       let bound
 
-      // 偏好变化只驱动 DOM 与 lastBuiltin；开关归属由仲裁与本插件 scope 决定，
-      // 不再在此回写（adopt 碾压与用户主动切换在本事件上无法区分）
+      // 偏好变化驱动 DOM 与 lastBuiltin。切离黑洞不在此回写开关：adopt 碾压与
+      // 用户主动切换在该方向上无法区分，交给仲裁；切向黑洞则方向无歧义——
+      // 偏好只在显式 setTheme(THEME_ID) 后才会是黑洞（ui-theme 的 schema 不允许
+      // 黑洞落盘，碾压永远压向内置值），故开关为关时必是外部激活（如插件市场），
+      // 回写开关为开，设置行经 reconcile 同步；让位窗口内的外部激活视为新的
+      // 开启手势，终结该窗口
       ctx.on('theme/change', (snapshot) => {
-        if (snapshot.preference !== THEME_ID) lastBuiltin = snapshot.preference
-        syncDom(snapshot.preference === THEME_ID)
+        if (snapshot.preference !== THEME_ID) {
+          lastBuiltin = snapshot.preference
+          syncDom(false)
+          return
+        }
+        syncDom(true)
+        if (scope.getSnapshot().value?.enabled !== true) {
+          pendingOff = false
+          void scope.set(ENABLED_FIELD, true)
+        }
       })
 
       // 开关手势：立即切换主题，并持久化开关状态（远程浏览器进程内生效）；
