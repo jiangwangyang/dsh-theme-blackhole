@@ -3,7 +3,7 @@
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![Version](https://img.shields.io/badge/version-0.1.0-green)
+![Version](https://img.shields.io/badge/version-0.1.7-green)
 
 English | [中文](README.zh-CN.md)
 
@@ -21,6 +21,8 @@ A black hole theme plugin for the DeepSeek Harness (dsh) Web UI: a WebGL real-ti
 ## Installation
 
 This plugin relies on the webServer service of a web profile. It only works with profiles that include a web server (such as web); **do not install it into headless profiles**.
+
+Requires dsh ≥ 0.1.7: starting with 0.1.7 the settings service was rewritten around plugin Config projection, removing the legacy settings namespace API (`settings.register` / `settings.get`); on older dsh versions, use version 0.1.0 of this plugin.
 
 ```bash
 dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
@@ -42,7 +44,7 @@ The plugin consists of a host side and a client side, plus two static assets:
 
 | Part        | File                   | Responsibility                                                                                                                                                                  |
 |-------------|------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Host side   | `src/index.js`         | Serves `/blackhole/*` static assets (read from disk per request); registers the `theme-blackhole` settings namespace; injects boot assets into index.html when the toggle is on |
+| Host side   | `src/index.js`         | Serves `/blackhole/*` static assets (read from disk per request); declares the `enabled` toggle as a Config schema (volatile; the settings form projects it under entry id `theme-blackhole`); injects boot assets into index.html when the toggle is on |
 | Client side | `src/client/index.js`  | Build-free client bundle: registers the black hole theme into the ThemeRuntime, registers the settings row, and drives the DOM visuals according to theme activation            |
 | Palette     | `assets/blackhole.css` | `--dsw-*` design token overrides gated by `html[data-dsh-blackhole]`                                                                                                            |
 | Renderer    | `assets/blackhole.js`  | Schwarzschild black hole WebGL renderer, exposing only the `window.DshBlackhole = { start, stop }` controller                                                                   |
@@ -53,7 +55,7 @@ All theme visuals are gated by the `data-dsh-blackhole` attribute on the `html` 
 
 - When the persisted toggle is on, the host side injects the activation marker, the stylesheet and a deferred renderer script before `</head>`, avoiding a flash of the default theme before the client plugin loads; nothing is injected when the toggle is off
 - On activation the client side adopts the already-present resource tags (which carry the same marker) instead of inserting duplicates; the renderer script only defines the controller and is started/stopped idempotently by the client on `theme/change` events
-- The black hole theme id is not part of ui-theme's built-in settings schema; the toggle persists in the plugin's own `theme-blackhole.enabled` namespace — a boundary dsh reserves for third-party themes
+- The black hole theme id is not part of ui-theme's built-in settings schema; the toggle persists in the `theme-blackhole.enabled` field of the plugin's own Config (the dsh ≥ 0.1.7 settings system projects every active plugin's Config into a settings form, which the client reads and writes through `configForms`) — a boundary dsh reserves for third-party themes
 
 ### The Black Hole Renderer (`assets/blackhole.js`)
 

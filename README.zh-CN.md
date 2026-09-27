@@ -3,7 +3,7 @@
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![Version](https://img.shields.io/badge/version-0.1.0-green)
+![Version](https://img.shields.io/badge/version-0.1.7-green)
 
 [English](README.md) | 中文
 
@@ -21,6 +21,8 @@ DeepSeek Harness（dsh）Web UI 的黑洞主题插件：以 WebGL 实时光线�
 ## 安装
 
 本插件依赖 web profile 的 webServer 服务，仅适用于含 webserver 的 profile（如 web）， **不要装进 headless**。
+
+要求 dsh ≥ 0.1.7：0.1.7 起设置服务重写为插件 Config 投影体系，移除了旧版的 settings 命名空间 API（`settings.register` / `settings.get`），旧版 dsh 请使用本插件的 0.1.0 版本。
 
 ```bash
 dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
@@ -42,7 +44,7 @@ dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
 
 | 部分       | 文件                   | 职责                                                                                                                  |
 |------------|------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| Host 半边  | `src/index.js`         | 服务 `/blackhole/*` 静态资源（按请求读盘）；注册 `theme-blackhole` 设置命名空间；开关为开时向 index.html 注入首屏引导 |
+| Host 半边  | `src/index.js`         | 服务 `/blackhole/*` 静态资源（按请求读盘）；以 Config schema 声明 `enabled` 开关（volatile，设置表单按条目 id `theme-blackhole` 投影）；开关为开时向 index.html 注入首屏引导 |
 | 客户端半边 | `src/client/index.js`  | 免构建 client bundle：把黑洞主题注册进 ThemeRuntime，注册设置行，按主题激活状态启停 DOM 视觉                          |
 | 调色板     | `assets/blackhole.css` | `html[data-dsh-blackhole]` 门控的 `--dsw-*` 设计令牌覆写                                                              |
 | 渲染器     | `assets/blackhole.js`  | 史瓦西黑洞 WebGL 渲染器，仅暴露 `window.DshBlackhole = { start, stop }` 控制器                                        |
@@ -53,7 +55,7 @@ dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
 
 - 开关持久化为开时，Host 半边在 `</head>` 前注入激活标记、样式表与 defer 的渲染器脚本，避免客户端插件加载前闪默认主题；开关为关时不注入任何东西
 - 客户端半边激活时认领导航中已存在的资源标签（携带同名标记），不重复插入；渲染器脚本只定义控制器，由客户端按 `theme/change` 事件幂等地 start/stop
-- 黑洞主题 id 不进入 ui-theme 的内置设置 schema，开关持久化在插件自有的 `theme-blackhole.enabled` 命名空间——这是 dsh 对第三方主题保留的边界
+- 黑洞主题 id 不进入 ui-theme 的内置设置 schema，开关持久化在插件自身 Config 的 `theme-blackhole.enabled` 字段（dsh ≥ 0.1.7 的设置体系把活跃插件的 Config 投影成设置表单，客户端经 `configForms` 读写）——这是 dsh 对第三方主题保留的边界
 
 ### 黑洞渲染器（`assets/blackhole.js`）
 

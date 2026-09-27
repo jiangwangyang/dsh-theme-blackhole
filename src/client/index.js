@@ -13,9 +13,9 @@
 //   2. 在设置 General 段注册 "主题-黑洞" 开关行（settings.general.item 槽位）；
 //   3. 按主题激活状态启停视觉：html[data-dsh-blackhole] 属性（门控
 //      blackhole.css）、样式表 link 与 window.DshBlackhole 渲染器；
-//   4. 开关状态持久化在本插件自有命名空间 theme-blackhole.enabled（Host 半边
-//      注册 schema）——黑洞主题 id 不进入 ui-theme 的内置设置 schema，
-//      这是 dsh 对第三方主题保留的边界。
+//   4. 开关状态持久化在本插件条目的 Config（theme-blackhole.enabled，Host 半边
+//      声明 schema，volatile 原地生效）——黑洞主题 id 不进入 ui-theme 的内置
+//      设置 schema，这是 dsh 对第三方主题保留的边界。
 //   5. 仲裁主题偏好归属：ui-settings 的共享镜像在每次 settings/document-updated
 //      后全量重读，会触发 ui-theme adopt 把偏好压回其持久化的内置值；
 //      以 ui-theme 持久化 section 的 preference 是否变化区分该碾压与用户在
@@ -37,11 +37,11 @@ window.__ModuleLoader__.load({
     /** 主题定义：深色基调；令牌覆写由 html 属性门控的 blackhole.css 承载。 */
     const THEME_DEFINITION = { id: THEME_ID, colorScheme: 'dark', tokens: {} }
 
-    /** 本插件自有的设置命名空间与开关字段（Host 半边注册 schema）。 */
+    /** 本插件的 profile 条目 id（Host 半边声明 Config schema，设置表单以此索引）与开关字段。 */
     const SETTINGS_NAMESPACE = 'theme-blackhole'
     const ENABLED_FIELD = 'enabled'
 
-    /** ui-theme 的持久化命名空间（只读观察，仲裁基准；字面量理由同 Host 半边）。 */
+    /** ui-theme 的 profile 条目 id（只读观察，仲裁基准；字面量理由同 Host 半边）。 */
     const UI_THEME_NAMESPACE = 'ui-theme'
 
     /** 激活标记：html 属性门控 blackhole.css；link 标签携带同名标记便于认领。 */
@@ -95,36 +95,24 @@ window.__ModuleLoader__.load({
       // 主题注册：卸载时 ThemeRuntime 自动把占用中的偏好重置为默认
       ctx.effect(() => ctx.theme.register(THEME_DEFINITION), 'theme-blackhole: theme registration')
 
-      // 设置作用域：本插件命名空间承载开关的持久化；远程浏览器自动降级为进程内
-      const scope = ctx.settingsScope.bind({
-        namespace: SETTINGS_NAMESPACE,
-        // 只窄化形状，不重复校验（Host 半边的 schema 已保证 enabled 存在）
-        decode: (section) => {
-          if (typeof section !== 'object' || section === null || Array.isArray(section)) return undefined
-          return { enabled: section.enabled === true }
-        },
-      })
+      // 设置表单：本插件条目承载开关的持久化，默认 decode 按 Host 的 Config
+      // schema 校验解析；远程浏览器自动降级为进程内（memory 模式）
+      const form = ctx.configForms.get(SETTINGS_NAMESPACE)
 
       // ui-theme 的只读观察：adopt 碾压把偏好压回持久化值且 section 不变；
       // 用户在外观行主动切换会真实改变 section.preference
-      const uiThemeScope = ctx.settingsScope.bind({
-        namespace: UI_THEME_NAMESPACE,
-        decode: (section) => {
-          if (typeof section !== 'object' || section === null || Array.isArray(section)) return undefined
-          return typeof section.preference === 'string' ? { preference: section.preference } : undefined
-        },
-      })
+      const uiThemeForm = ctx.configForms.get(UI_THEME_NAMESPACE)
 
       let active = false
       let scriptLoading = false
-      // 最近的内置偏好：关闭开关时恢复它；黑洞偏好不落盘 ui-theme 命名空间，
+      // 最近的内置偏好：关闭开关时恢复它；黑洞偏好不落盘 ui-theme 的 Config，
       // 用户的浅色/深色/跟随系统选择不会因开关而丢失
       let lastBuiltin
       // 最近见到的 ui-theme 持久化偏好（仲裁基准；首次观察只记录不判定）
       let lastPersisted
       // 让位写回 enabled=false 尚未落盘的窗口：抑制一切重新断言
       let pendingOff = false
-      // 设置行 store 的本地单调计数（store 改由本插件 scope 驱动）
+      // 设置行 store 的本地单调计数（store 由本插件 form 驱动）
       let rowRevision = 0
 
       /**
@@ -182,7 +170,7 @@ window.__ModuleLoader__.load({
        * 交还。与持久化值不同的偏好是用户尚未落盘的主动切换，交给仲裁让位。
        */
       const reconcile = () => {
-        const section = scope.getSnapshot().value
+        const section = form.getSnapshot().value
         if (section === undefined) return
         if (!section.enabled) pendingOff = false
         if (bound !== undefined) bound.sync(section.enabled, ++rowRevision)
@@ -195,7 +183,7 @@ window.__ModuleLoader__.load({
           restoreBuiltin()
         }
       }
-      ctx.effect(() => scope.subscribe(reconcile), 'theme-blackhole: settings adoption')
+      ctx.effect(() => form.subscribe(reconcile), 'theme-blackhole: settings adoption')
 
       /**
        * 仲裁偏好归属：ui-theme 持久化偏好变化 = 用户在外观行主动切换，让位并
@@ -204,28 +192,28 @@ window.__ModuleLoader__.load({
        * 无绘制）。已知边界：黑洞激活时点击恰好等于持久化值的内置主题会被视为
        * 碾压而覆盖，需用开关关闭——不改动 dsh 前提下该场景无法区分。
        */
-      ctx.effect(() => uiThemeScope.subscribe(() => {
-        const section = uiThemeScope.getSnapshot().value
+      ctx.effect(() => uiThemeForm.subscribe(() => {
+        const section = uiThemeForm.getSnapshot().value
         if (section === undefined) return
         if (lastPersisted === undefined) {
           // 首次观察：只记录基准，不判定为用户切换
           lastPersisted = section.preference
         } else if (section.preference !== lastPersisted) {
           lastPersisted = section.preference
-          if (scope.getSnapshot().value?.enabled === true) {
+          if (form.getSnapshot().value?.enabled === true) {
             pendingOff = true
-            void scope.set(ENABLED_FIELD, false)
+            void form.set(ENABLED_FIELD, false)
           }
           return
         }
         if (!pendingOff
-          && scope.getSnapshot().value?.enabled === true
+          && form.getSnapshot().value?.enabled === true
           && ctx.theme.getTheme().preference !== THEME_ID) {
           ctx.theme.setTheme(THEME_ID)
         }
       }), 'theme-blackhole: ui-theme adoption arbitration')
 
-      // 设置行 store：持久化开关的镜像，reconcile（本插件 scope 订阅）是唯一写者
+      // 设置行 store：持久化开关的镜像，reconcile（本插件 form 订阅）是唯一写者
       const store = defineStore({
         init: () => ({ enabled: false, revision: -1 }),
         actions: {
@@ -251,9 +239,9 @@ window.__ModuleLoader__.load({
           return
         }
         syncDom(true)
-        if (scope.getSnapshot().value?.enabled !== true) {
+        if (form.getSnapshot().value?.enabled !== true) {
           pendingOff = false
-          void scope.set(ENABLED_FIELD, true)
+          void form.set(ENABLED_FIELD, true)
         }
       })
 
@@ -261,7 +249,7 @@ window.__ModuleLoader__.load({
       // 手动手势终结让位窗口
       const setEnabled = (on) => {
         pendingOff = false
-        void scope.set(ENABLED_FIELD, on)
+        void form.set(ENABLED_FIELD, on)
         if (on) ctx.theme.setTheme(THEME_ID)
         else restoreBuiltin()
       }
@@ -283,13 +271,13 @@ window.__ModuleLoader__.load({
         locale: LOCALE_NS,
         inject: (actions) => {
           bound = actions
-          // 从 scope 重新同步，不丢注册与首渲染之间的变化（revision 守卫去重）
-          bound.sync(scope.getSnapshot().value?.enabled === true, ++rowRevision)
+          // 从 form 重新同步，不丢注册与首渲染之间的变化（revision 守卫去重）
+          bound.sync(form.getSnapshot().value?.enabled === true, ++rowRevision)
           return { setEnabled }
         },
       }, BlackholeRow))
 
-      // 应用当前状态（晚于内置插件激活的组成里，scope 可能已就绪）
+      // 应用当前状态（晚于内置插件激活的组成里，form 可能已就绪）
       const snapshot = ctx.theme.getTheme()
       if (snapshot.preference !== THEME_ID) lastBuiltin = snapshot.preference
       syncDom(snapshot.preference === THEME_ID)
@@ -300,7 +288,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 客户端半边依赖的服务（与 package.json dsh.client.inject 的包一一对应）。 */
-    const inject = ['theme', 'slots', 'locale', 'connection', 'remote', 'settingsScope']
+    const inject = ['theme', 'slots', 'locale', 'connection', 'remote', 'configForms']
 
     return { inject, apply }
   },
