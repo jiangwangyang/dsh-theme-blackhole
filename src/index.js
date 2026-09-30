@@ -6,7 +6,7 @@
  *
  * 职责：
  *   1. 通过 webServer 服务 /blackhole/* 静态资源（按请求读盘，改动后刷新即生效）：
- *      /blackhole/blackhole.css  结构层样式（画布层、#root 毛玻璃、shiki 令牌；
+ *      /blackhole/blackhole.css  结构层样式（画布层及其降级底色与柔焦、shiki 令牌；
  *      --dsw-* 调色板已由客户端半边经 ctx.theme.overrideTokens 进入令牌覆盖层）
  *      /blackhole/blackhole.js   史瓦西黑洞 WebGL 渲染器（window.DshBlackhole 控制器）
  *   2. tapIndex 首屏引导：无条件向 index.html 注入激活标记、样式表与渲染器，
@@ -19,7 +19,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** Stable Cordis plugin name. */
+/** Cordis 插件名（稳定标识，皮肤切换器据此定位加载行，勿改）。 */
 export const name = 'theme-blackhole'
 
 /** 本插件对外服务的静态资源表：URL 路径 → 相对文件名与 MIME 类型。 */

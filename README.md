@@ -105,7 +105,7 @@ Integration terminates in three ways:
 
 The palette is delivered as a token override layer over the Web UI's `--dsw-*` design tokens (stacked via `ctx.theme.overrideTokens`, each token supplying the same value for both palette modes); the structural rules in `assets/blackhole.css` are gated by `html[data-dsh-blackhole]`:
 
-- The canvas layer sits at `z-index: 0`, above the body background and below `#root`; `#root` applies `backdrop-filter: blur(16px)`, so translucent panels see a soft-focused black hole through the blurred backdrop
+- The canvas layer sits at `z-index: -1`, sunk below the body background and all app content — no official mount node is touched, and overlay/menu/toast ordering is unaffected; the layer carries its own fallback backdrop and a `filter: blur(16px)` soft focus, so translucent panels see a soft-focused black hole
 - Background tokens become layered translucent glass; higher layers (menus, popovers, toasts) are more opaque to preserve readability
 - Brand and interactive accents become accretion-disk amber (`rgb(245, 158, 11)`), with a cool blue-white text gradient
 - Shiki dark code-highlighting tokens are set as well; code blocks use a nearly opaque night-sky base

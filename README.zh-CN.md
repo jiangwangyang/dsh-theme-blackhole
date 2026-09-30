@@ -105,7 +105,7 @@ d^2u/dphi^2 = 1.5 u^2 - u
 
 调色板以令牌覆盖层的形式覆写 Web UI 的 `--dsw-*` 设计令牌（经 `ctx.theme.overrideTokens` 叠放，每令牌对浅/深两档给出同值）；`assets/blackhole.css` 中的结构规则由 `html[data-dsh-blackhole]` 门控：
 
-- 画布层 `z-index: 0` 位于 body 背景之上、`#root` 之下；`#root` 施加 `backdrop-filter: blur(16px)`，半透明面板透过模糊后的黑洞看到柔焦深空
+- 画布层 `z-index: -1` 沉到 body 背景与全部应用内容之下——不接触任何官方挂载节点，弹层/菜单/Toast 的排序语义不受影响；画布层自带降级底色与 `filter: blur(16px)` 柔焦，半透明面板透过它看到柔焦黑洞
 - 背景令牌改为分层半透明玻璃，越靠上的层（菜单、弹层、Toast）越不透明，保证可读性
 - 品牌与交互强调色改为吸积盘琥珀（`rgb(245, 158, 11)`），文字为蓝白冷调梯度
 - 同时设定 shiki 暗色代码高亮令牌，代码块使用近乎不透明的夜空底

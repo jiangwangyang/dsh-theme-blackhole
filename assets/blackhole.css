@@ -1,10 +1,16 @@
 /* ==========================================
    dsh 黑洞主题 — 结构层样式
-   深空玻璃调色板（--dsw-* 令牌覆写）已由客户端半边经
+   深空玻璃调色板（--dsw-* 令牌覆写）由客户端半边经
    ctx.theme.overrideTokens 进入令牌覆盖层，以 body 内联变量的形式
    生效并随卸载还原；本样式表只承载令牌契约之外的结构与呈现：
-   shiki 暗色高亮、降级底色、画布层与 #root 毛玻璃。
+   shiki 暗色高亮、深空底色、画布层与柔焦。
    全部规则由 html[data-dsh-blackhole] 门控，卸载摘除该属性即还原。
+
+   层叠模型（不依赖任何官方内部节点）：
+     html 背景（最底层兜底）
+       → #dsh-blackhole-layer（z-index:-1：自带底色 + 柔焦的画布层）
+         → body 背景与全部应用内容（含 body 下的弹层 portal）
+   应用内容无需任何抬升，弹层/菜单/Toast 的排序语义不受影响。
    ========================================== */
 
 /* 深色渲染基调 + shiki 暗色代码高亮。
@@ -25,32 +31,23 @@ html[data-dsh-blackhole] {
   --shiki-token-link: #74c0fc;
 }
 
-/* 降级底色：WebGL 不可用时由 html/body 透出纯黑深空。
-   画布层 z-index:0 位于 body 背景之上、#root 之下；#root 的
-   backdrop-filter 模糊身后的画布，半透明面板透过模糊后的黑洞透出。
-   与 openagents 一致：模糊在面板层，不在 body 上。 */
+/* 页面最底层兜底：画布层尚未创建（脚本未加载）时透出纯黑深空 */
 html[data-dsh-blackhole] {
   background: #030309;
 }
 
-/* 黑洞画布层：全屏固定、z-index:0（body 背景之上、#root 之下）、不拦截指针 */
+/* 黑洞画布层：fixed 负层级沉到全部内容之下，不拦截指针；
+   自带降级底色（WebGL 失败时渲染器只移除画布，层保留，纯黑深空透出）；
+   柔焦以 filter 施加在画布层自身，无需在任何应用容器上开 backdrop-filter；
+   inset 外扩 24px 吃掉 blur 在视口边缘的虚化过渡带 */
 #dsh-blackhole-layer {
   position: fixed;
-  inset: 0;
-  z-index: 0;
+  inset: -24px;
+  z-index: -1;
   overflow: hidden;
   pointer-events: none;
-}
-
-/* #root 提升到画布之上并施加毛玻璃模糊：backdrop-filter 模糊 z-index:0
-   的画布层，应用内半透明面板透过 #root 的模糊背景看到柔焦后的黑洞。
-   position:relative + z-index:1 创建新堆叠上下文，保证全部应用内容在画布之上。
-   已知耦合：依赖官方 #root 挂载节点的定位/层叠，官方改结构时需复核。 */
-html[data-dsh-blackhole] #root {
-  position: relative;
-  z-index: 1;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: #030309;
+  filter: blur(16px);
 }
 
 #dsh-blackhole-canvas {

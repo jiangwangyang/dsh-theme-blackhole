@@ -3,8 +3,9 @@
 // 移植自 openagents static/js/theme_blackhole.js：固定参数、无任何可调节项
 // 与交互，仅保留缓慢自动环绕。渲染分辨率为 0.5 x devicePixelRatio(上限 2)
 // 倍窗口尺寸，半分辨率渲染兼顾性能与清晰度。
-// 本脚本自建全屏画布层（z-index:-1，内容之下），WebGL 不可用或着色器编译
-// 失败时隐藏画布层，由 body 上的降级底色（纯黑 + 微弱吸积盘橙晕）透出。
+// 本脚本自建全屏画布层（z-index:-1，沉到全部内容之下，层叠模型见
+// blackhole.css）；画布层自带降级底色，WebGL 不可用或着色器编译失败时
+// 只移除画布，层保留，透出纯黑深空。
 // 本脚本不自动启动：仅暴露 window.DshBlackhole = { start, stop } 控制器，
 // 由客户端半边按主题激活状态启停，重复 start/stop 幂等。
 // ==========================================
@@ -246,8 +247,8 @@
   var bh = { running: false, raf: null, canvas: null, gl: null, U: null, simT: 0, prevT: 0, yaw: BH_YAW0, ready: false, failed: false }
 
   // ===== 4. 画布层挂载 =====
-  // 自建全屏固定层（位于 body 底色之上、#root 之下）；深色基调由
-  // html[data-dsh-blackhole] 门控的 blackhole.css 与主题系统承载，此处不再染指。
+  // 自建全屏固定层（负层级沉底，不依赖任何官方内部节点）；层的几何、层级、
+  // 降级底色与柔焦全部由 blackhole.css 承载，此处只建节点、不染指样式。
   function mountLayer() {
     var existing = document.getElementById('dsh-blackhole-layer')
     if (existing) {
@@ -405,11 +406,11 @@
   // 系统要求减少动态时仅渲染一帧静态画面
   function startBlackhole() {
     if (!initBlackhole()) {
-      // WebGL 不可用：隐藏画布层（alpha:false 的空白画布为纯黑不透明），
-      // 让 body 的降级底色（纯黑 + 微弱橙晕）透出
-      var layer = document.getElementById('dsh-blackhole-layer')
-      if (layer) {
-        layer.style.display = 'none'
+      // WebGL 不可用：只移除画布（alpha:false 的空白画布为不透明纯黑），
+      // 画布层保留，其自带的降级底色透出纯黑深空
+      var failed = document.getElementById('dsh-blackhole-canvas')
+      if (failed) {
+        failed.remove()
       }
       return
     }
