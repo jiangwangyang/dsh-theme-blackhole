@@ -3,11 +3,11 @@
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![Version](https://img.shields.io/badge/version-0.1.7-green)
+![Version](https://img.shields.io/badge/version-0.2.0-green)
 
 English | [中文](README.zh-CN.md)
 
-A black hole theme plugin for the DeepSeek Harness (dsh) Web UI: a WebGL real-time ray-traced Schwarzschild black hole as the application background, paired with a deep-space glass panel palette, switchable from Settings > General > Theme - Black Hole.
+A black hole theme plugin for the DeepSeek Harness (dsh) Web UI: a WebGL real-time ray-traced Schwarzschild black hole as the application background, paired with a deep-space glass panel palette. There is no toggle: the theme is enabled while the plugin is installed, and disabling or removing the plugin restores the default theme without residue.
 
 ![hero](docs/screenshots/blackhole.png)
 
@@ -15,14 +15,14 @@ A black hole theme plugin for the DeepSeek Harness (dsh) Web UI: a WebGL real-ti
 
 - **WebGL Schwarzschild black hole background**: null-geodesic ray tracing renders gravitational lensing, the accretion disk and the photon ring in real time, with a slow automatic camera orbit
 - **Deep-space glass panels**: translucent dark token overrides plus backdrop blur let the black hole show through softly behind the content; the brand accent becomes accretion-disk amber
-- **First-class theme**: registered into the theme runtime; the settings row toggle syncs both ways with the appearance settings, persists across reloads, and boots without flashing the default theme
+- **Token override layer, always on**: the palette stacks onto the active theme through the theme service's token override layer (`ctx.theme.overrideTokens`), orthogonal to the light/dark/system preference — the plugin never reads or writes the appearance preference, and unloading retracts the layer automatically; boot injection avoids flashing the default theme
 - **Performance-friendly with graceful degradation**: half-resolution rendering, 30fps cap, honors the system reduced-motion preference, and falls back to a pure-black deep-space backdrop when WebGL is unavailable
 
 ## Installation
 
 This plugin relies on the webServer service of a web profile. It only works with profiles that include a web server (such as web); **do not install it into headless profiles**.
 
-Requires dsh ≥ 0.1.7: starting with 0.1.7 the settings service was rewritten around plugin Config projection, removing the legacy settings namespace API (`settings.register` / `settings.get`); on older dsh versions, use version 0.1.0 of this plugin.
+Requires dsh ≥ 0.1.0-rc.7 (the release that introduced the theme service's token override layer, `ctx.theme.overrideTokens`). Version 0.1.x of this plugin — the one with the settings toggle — requires dsh ≥ 0.1.7.
 
 ```bash
 dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
@@ -30,11 +30,10 @@ dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
 
 ## Usage
 
-After installing and starting, go to **Settings > General > Theme - Black Hole**:
+There is no settings toggle: the black hole theme is enabled as soon as the plugin loads.
 
-- **Turn on**: switches to the black hole theme; the toggle is persisted and survives reloads and restarts
-- **Turn off**: restores your previous built-in theme (light / dark / follow system); your original preference is never lost
-- **Switch away from the appearance row**: when you switch back to a built-in theme in the appearance settings, the toggle is written back to off, keeping the two settings consistent
+- **Turn off**: disable or remove the plugin (`dsh plugin --profile web remove dsh-theme-blackhole`); the token override layer is retracted and every DOM trace is removed, restoring your previous appearance (light / dark / follow system) exactly as it was
+- **Appearance setting**: the light/dark/system preference remains yours to change; the black hole palette renders identically on top of any of them
 
 ## How It Works
 
@@ -44,18 +43,19 @@ The plugin consists of a host side and a client side, plus two static assets:
 
 | Part        | File                   | Responsibility                                                                                                                                                                  |
 |-------------|------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Host side   | `src/index.js`         | Serves `/blackhole/*` static assets (read from disk per request); declares the `enabled` toggle as a Config schema (volatile; the settings form projects it under entry id `theme-blackhole`); injects boot assets into index.html when the toggle is on |
-| Client side | `src/client/index.js`  | Build-free client bundle: registers the black hole theme into the ThemeRuntime, registers the settings row, and drives the DOM visuals according to theme activation            |
-| Palette     | `assets/blackhole.css` | `--dsw-*` design token overrides gated by `html[data-dsh-blackhole]`                                                                                                            |
+| Host side   | `src/index.js`         | Serves `/blackhole/*` static assets (read from disk per request); unconditionally injects boot assets into index.html so the first paint never flashes the default theme |
+| Client side | `src/client/index.js`  | Build-free client bundle: stacks the palette through `ctx.theme.overrideTokens`, asserts a dark rendering baseline over whatever the preference resolves to, and mounts the canvas/blur structure layer |
+| Structure   | `assets/blackhole.css` | Canvas layer, `#root` backdrop blur, fallback backdrop and shiki tokens gated by `html[data-dsh-blackhole]` (the `--dsw-*` palette lives in the token override layer)                                                                                                            |
 | Renderer    | `assets/blackhole.js`  | Schwarzschild black hole WebGL renderer, exposing only the `window.DshBlackhole = { start, stop }` controller                                                                   |
 
 ### Boot Injection and Gating
 
-All theme visuals are gated by the `data-dsh-blackhole` attribute on the `html` element: the palette overrides apply while the attribute is present, and the default palette is fully restored once it is removed, leaving no residue.
+All structural visuals are gated by the `data-dsh-blackhole` attribute on the `html` element: while the attribute is present the canvas layer, backdrop blur and shiki tokens apply; removing it restores everything, leaving no residue.
 
-- When the persisted toggle is on, the host side injects the activation marker, the stylesheet and a deferred renderer script before `</head>`, avoiding a flash of the default theme before the client plugin loads; nothing is injected when the toggle is off
-- On activation the client side adopts the already-present resource tags (which carry the same marker) instead of inserting duplicates; the renderer script only defines the controller and is started/stopped idempotently by the client on `theme/change` events
-- The black hole theme id is not part of ui-theme's built-in settings schema; the toggle persists in the `theme-blackhole.enabled` field of the plugin's own Config (the dsh ≥ 0.1.7 settings system projects every active plugin's Config into a settings form, which the client reads and writes through `configForms`) — a boundary dsh reserves for third-party themes
+- The host side unconditionally injects the activation marker, the stylesheet and a deferred renderer script before `</head>`, so the first paint never flashes the default theme; on load the client side adopts the already-present resource tags (which carry the same marker) instead of inserting duplicates
+- The palette does not live in CSS: the client stacks it through `ctx.theme.overrideTokens('blackhole', tokens)`, and the theme runtime writes the tokens as inline variables on `body`, folded into every `theme/change` snapshot. The layer is orthogonal to the light/dark/system preference — the plugin never registers a theme id nor reads/writes the preference — and unloading the plugin retracts the layer automatically
+- Because the black hole palette is a single deep-space scheme rendered under any preference, the client asserts a dark rendering baseline (inline `color-scheme: dark` and the dark base palette attribute) after every `theme/change` — a presentation-only write that never touches the stored preference — and restores the preference-resolved baseline on unload
+- The renderer script only defines the `window.DshBlackhole` controller; the client starts it idempotently and stops it (RAF cancel + GL context destruction + canvas removal) on unload
 
 ### The Black Hole Renderer (`assets/blackhole.js`)
 
@@ -103,7 +103,7 @@ Integration terminates in three ways:
 
 ### The Deep-Space Glass Palette (`assets/blackhole.css`)
 
-All rules are gated by `html[data-dsh-blackhole]` and override the Web UI's `--dsw-*` design tokens:
+The palette is delivered as a token override layer over the Web UI's `--dsw-*` design tokens (stacked via `ctx.theme.overrideTokens`, each token supplying the same value for both palette modes); the structural rules in `assets/blackhole.css` are gated by `html[data-dsh-blackhole]`:
 
 - The canvas layer sits at `z-index: 0`, above the body background and below `#root`; `#root` applies `backdrop-filter: blur(16px)`, so translucent panels see a soft-focused black hole through the blurred backdrop
 - Background tokens become layered translucent glass; higher layers (menus, popovers, toasts) are more opaque to preserve readability

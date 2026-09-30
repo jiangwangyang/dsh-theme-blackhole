@@ -3,292 +3,232 @@
 //
 // dsh 客户端模块系统的既定契约：执行 bundle 仅注册工厂
 //（window.__ModuleLoader__.load({ id, factory })），模块体副作用在工厂
-// 物化时运行；factory 收到的 require 由模块表应答，基线 specifier 含
-// 'react' 与 '@deepseek-ai/dsh-client-store'，因此本文件直接作为
+// 物化时运行；factory 收到的 require 由模块表应答。本文件直接作为
 // client bundle 提供（package.json exports["./client"]），无需构建步骤。
 //
-// 职责：
-//   1. 把黑洞主题注册进 ThemeRuntime（ctx.theme.register），使其成为
-//      theme/change 体系里的一等主题；
-//   2. 在设置 General 段注册 "主题-黑洞" 开关行（settings.general.item 槽位）；
-//   3. 按主题激活状态启停视觉：html[data-dsh-blackhole] 属性（门控
-//      blackhole.css）、样式表 link 与 window.DshBlackhole 渲染器；
-//   4. 开关状态持久化在本插件条目的 Config（theme-blackhole.enabled，Host 半边
-//      声明 schema，volatile 原地生效）——黑洞主题 id 不进入 ui-theme 的内置
-//      设置 schema，这是 dsh 对第三方主题保留的边界。
-//   5. 仲裁主题偏好归属：ui-settings 的共享镜像在每次 settings/document-updated
-//      后全量重读，会触发 ui-theme adopt 把偏好压回其持久化的内置值；
-//      以 ui-theme 持久化 section 的 preference 是否变化区分该碾压与用户在
-//      外观行的主动切换，前者重新断言黑洞，后者让位并回写开关为关。
-//   6. 回写外部激活：插件市场等第三方直接 setTheme('blackhole') 时，
-//      偏好的变化方向无歧义（adopt 碾压只压向内置值），回写开关为开，
-//      让设置行、首屏引导注入与碾压后的重新断言全部跟上。
+// 本插件无开关：加载即启用，卸载即还原。职责只有三件：
+//   1. 令牌覆盖层：ctx.theme.overrideTokens 把深空玻璃调色板叠在当前
+//      主题之上。覆盖层与 light/dark/system 偏好通道正交——不注册主题
+//      id、不读写主题偏好，卸载时覆盖层随纤维回收自动还原；
+//   2. 深色渲染基调断言：ui-layout 的 ThemePresenter 每次发布都按偏好
+//      重写 color-scheme 与 body[data-ds-dark-theme] 暗色基底；黑洞是
+//      单套深空色，需要暗色基底兜底未覆盖的令牌，故在每次 theme/change
+//      后（内置插件先注册监听，本监听器运行于 presenter 之后）把两者
+//      重新断言为 dark——只改呈现，不碰偏好；
+//   3. 结构层视觉：html[data-dsh-blackhole] 门控属性、样式表 link 与
+//      window.DshBlackhole 渲染器的挂载/启停。
 // ==========================================
 window.__ModuleLoader__.load({
   id: 'dsh-theme-blackhole',
-  factory: (require) => {
+  factory: () => {
     'use strict'
-    const React = require('react')
-    const { defineStore } = require('@deepseek-ai/dsh-client-store')
 
-    /** 注册进 ThemeRuntime 的主题 id。 */
-    const THEME_ID = 'blackhole'
+    /** 令牌覆盖层 source 标识（动态包门面会改钉为包 id，此处为直装插件路径）。 */
+    const SOURCE = 'blackhole'
 
-    /** 主题定义：深色基调；令牌覆写由 html 属性门控的 blackhole.css 承载。 */
-    const THEME_DEFINITION = { id: THEME_ID, colorScheme: 'dark', tokens: {} }
-
-    /** 本插件的 profile 条目 id（Host 半边声明 Config schema，设置表单以此索引）与开关字段。 */
-    const SETTINGS_NAMESPACE = 'theme-blackhole'
-    const ENABLED_FIELD = 'enabled'
-
-    /** ui-theme 的 profile 条目 id（只读观察，仲裁基准；字面量理由同 Host 半边）。 */
-    const UI_THEME_NAMESPACE = 'ui-theme'
-
-    /** 激活标记：html 属性门控 blackhole.css；link 标签携带同名标记便于认领。 */
+    /** 激活标记：html 属性门控 blackhole.css 结构层；link 标签携带同名标记便于认领。 */
     const MARK = 'data-dsh-blackhole'
     const STYLE_URL = '/blackhole/blackhole.css'
     const SCRIPT_URL = '/blackhole/blackhole.js'
 
-    /** 设置行文案命名空间与词典。 */
-    const LOCALE_NS = 'settings.theme-blackhole'
-    const zh = { 'blackhole.title': '主题-黑洞' }
-    const en = { 'blackhole.title': 'Theme - Black Hole' }
-
-    /** 设置行样式：布局对齐语言行（figma Setting-Cell），颜色全部取自设计令牌。 */
-    const ROW_CSS = [
-      '.dsh-bh-row{display:flex;align-items:center;gap:8px;padding:16px 0;border-bottom:1px solid var(--dsw-alias-border-l2);}',
-      '.dsh-bh-title{flex:1;min-width:0;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);}',
-      '.dsh-bh-switch{flex:none;width:36px;height:20px;padding:2px;border:none;border-radius:10px;background:var(--dsw-alias-interactive-bg-active);cursor:pointer;transition:background .15s ease;}',
-      '.dsh-bh-switch.dsh-bh-on{background:var(--dsw-alias-brand-primary);}',
-      '.dsh-bh-thumb{display:block;width:16px;height:16px;border-radius:50%;background:var(--dsw-alias-label-primary-inverted);transition:transform .15s ease;}',
-      '.dsh-bh-on .dsh-bh-thumb{transform:translateX(16px);}',
-    ].join('\n')
+    /** ui-layout ThemePresenter 按偏好维护的暗色基底属性（呈现层，只读其契约）。 */
+    const DARK_ATTRIBUTE = 'data-ds-dark-theme'
 
     /**
-     * 渲染 "主题-黑洞" 设置行：标题 + 开关（role="switch"）。
-     * @param {object} props - 槽位组合 props（runtime/store/locale/inject 四份）。
-     * @param {(key: string) => string} props.t - 文案翻译座。
-     * @param {<T>(selector: (state: { enabled: boolean, revision: number }) => T) => T} props.useStore - store 选择器 hook。
-     * @param {(on: boolean) => void} props.setEnabled - 开关写入口。
-     * @returns {object} React 元素树。
+     * 深空玻璃调色板：令牌名 → 单套色值。面板为半透明深色玻璃，让
+     * blackhole.js 的 WebGL 黑洞背景从内容之下透出；品牌强调色为吸积盘琥珀。
      */
-    function BlackholeRow(props) {
-      const enabled = props.useStore((state) => state.enabled)
-      return React.createElement('div', { className: 'dsh-bh-row' },
-        React.createElement('div', { className: 'dsh-bh-title' }, props.t('blackhole.title')),
-        React.createElement('button', {
-          type: 'button',
-          role: 'switch',
-          'aria-checked': enabled,
-          'aria-label': props.t('blackhole.title'),
-          className: enabled ? 'dsh-bh-switch dsh-bh-on' : 'dsh-bh-switch',
-          onClick: () => { props.setEnabled(!enabled) },
-        }, React.createElement('span', { className: 'dsh-bh-thumb' })))
+    const PALETTE = {
+      /* 背景：分层玻璃，越靠上的层越不透明（菜单/弹层需保证可读性） */
+      '--dsw-alias-bg-base': 'rgba(4, 5, 11, 0.30)',
+      '--dsw-alias-bg-layer-1': 'rgba(9, 11, 20, 0.42)',
+      '--dsw-alias-bg-layer-2': 'rgba(12, 15, 26, 0.52)',
+      '--dsw-alias-bg-layer-3': 'rgba(15, 18, 31, 0.64)',
+      '--dsw-alias-bg-mask-1': 'rgba(0, 0, 0, 0.5)',
+      '--dsw-alias-bg-mask-2': 'rgba(0, 0, 0, 0.24)',
+      '--dsw-alias-bg-mask-3': 'rgba(0, 0, 0, 0.55)',
+      '--dsw-alias-bg-mask-photo': 'rgba(0, 0, 0, 0.88)',
+      '--dsw-alias-bg-mask-drop': 'rgba(10, 12, 24, 0.55)',
+      '--dsw-alias-bg-module-platform': 'rgba(13, 16, 28, 0.55)',
+      '--dsw-alias-bg-multi-select': 'rgba(15, 18, 31, 0.5)',
+      '--dsw-alias-bg-overlay': 'rgba(18, 21, 36, 0.72)',
+      '--dsw-alias-bg-skeleton': 'rgba(255, 255, 255, 0.06)',
+
+      /* 描边：冷调微光线，随层级加深 */
+      '--dsw-alias-border-inverted2': 'rgba(255, 255, 255, 0.10)',
+      '--dsw-alias-border-inverted': 'rgba(255, 255, 255, 0.08)',
+      '--dsw-alias-border-l1': 'rgba(151, 168, 212, 0.09)',
+      '--dsw-alias-border-l2-darkmode-thin': 'rgba(151, 168, 212, 0.10)',
+      '--dsw-alias-border-l2': 'rgba(151, 168, 212, 0.14)',
+      '--dsw-alias-border-l3': 'rgba(151, 168, 212, 0.19)',
+      '--dsw-alias-border-l4': 'rgba(151, 168, 212, 0.26)',
+
+      /* 品牌：吸积盘琥珀（前景文字取深棕，保证琥珀底上的对比度） */
+      '--dsw-alias-brand-primary-invert': 'rgb(24, 16, 4)',
+      '--dsw-alias-brand-primary-new-colorprimary-new-color': 'rgb(251, 176, 34)',
+      '--dsw-alias-brand-primary': 'rgb(245, 158, 11)',
+      '--dsw-alias-brand-text': 'rgb(253, 186, 68)',
+
+      /* 按钮 */
+      '--dsw-alias-button-contrast-fill': 'rgb(233, 237, 248)',
+      '--dsw-alias-button-elevated-fill': 'rgba(18, 21, 36, 0.85)',
+      '--dsw-alias-button-floating-fill': 'rgba(16, 19, 32, 0.78)',
+      '--dsw-alias-button-floating-hover': 'rgba(24, 28, 46, 0.85)',
+      '--dsw-alias-button-ghost-active-border': 'rgb(140, 150, 178)',
+      '--dsw-alias-button-ghost-active-fill': 'rgba(255, 255, 255, 0.10)',
+      '--dsw-alias-button-ghost-active-hover': 'rgba(255, 255, 255, 0.16)',
+      '--dsw-alias-button-info-fill': 'rgb(245, 158, 11)',
+      '--dsw-alias-button-info-hover': 'rgb(251, 176, 34)',
+      '--dsw-alias-button-primary-dimmed': 'rgba(245, 158, 11, 0.22)',
+      '--dsw-alias-button-primary-fill': 'rgb(245, 158, 11)',
+      '--dsw-alias-button-primary-hover': 'rgb(251, 176, 34)',
+      '--dsw-alias-button-tool-bar-fill-invisible': 'rgba(20, 22, 36, 0.4)',
+      '--dsw-alias-button-tool-bar-fill': 'rgba(30, 34, 52, 0.55)',
+      '--dsw-alias-button-tool-bar-hover': 'rgba(38, 43, 64, 0.68)',
+
+      /* 交互态：白色叠层提亮，强调态染琥珀 */
+      '--dsw-alias-interactive-bg-active': 'rgba(255, 255, 255, 0.14)',
+      '--dsw-alias-interactive-bg-hover-accent': 'rgba(245, 158, 11, 0.18)',
+      '--dsw-alias-interactive-bg-hover-danger': 'rgba(242, 90, 90, 0.16)',
+      '--dsw-alias-interactive-bg-hover-solid': 'rgba(255, 255, 255, 0.10)',
+      '--dsw-alias-interactive-bg-hover': 'rgba(255, 255, 255, 0.07)',
+
+      /* 文字：蓝白冷调梯度 */
+      '--dsw-alias-label-caption': 'rgb(110, 120, 150)',
+      '--dsw-alias-label-dimmed': 'rgb(78, 86, 112)',
+      '--dsw-alias-label-primary-bluish': 'rgb(147, 197, 253)',
+      '--dsw-alias-label-primary-dimmed': 'rgb(206, 212, 230)',
+      '--dsw-alias-label-primary-foreground': 'rgb(24, 16, 4)',
+      '--dsw-alias-label-primary-inverted': 'rgb(24, 16, 4)',
+      '--dsw-alias-label-primary': 'rgb(233, 237, 248)',
+      '--dsw-alias-label-secondary': 'rgb(184, 192, 214)',
+      '--dsw-alias-label-tertiary': 'rgb(140, 150, 178)',
+
+      /* Markdown：代码块近乎不透明的夜空底，选中段染琥珀 */
+      '--dsw-alias-markdown-citation': 'rgba(20, 24, 42, 0.6)',
+      '--dsw-alias-markdown-code-block-banner': 'rgba(10, 12, 22, 0.72)',
+      '--dsw-alias-markdown-code-block': 'rgba(4, 6, 13, 0.84)',
+      '--dsw-alias-markdown-code-segment-selected': 'rgba(245, 158, 11, 0.22)',
+      '--dsw-alias-markdown-code-segment-unselected': 'rgba(4, 6, 13, 0.55)',
+      '--dsw-alias-markdown-inline-code': 'rgba(255, 255, 255, 0.08)',
+      '--dsw-alias-markdown-placeholder': 'rgba(255, 255, 255, 0.07)',
+      '--dsw-alias-markdown-tag': 'rgba(255, 255, 255, 0.10)',
+
+      /* 滚动条 */
+      '--dsw-alias-scrollbar-bg-l1': 'rgba(151, 168, 212, 0.22)',
+      '--dsw-alias-scrollbar-bg-l2': 'rgba(151, 168, 212, 0.26)',
+      '--dsw-alias-scrollbar-hover-l1': 'rgba(151, 168, 212, 0.38)',
+      '--dsw-alias-scrollbar-hover-l2': 'rgba(151, 168, 212, 0.46)',
+
+      /* 状态色：业务主色染琥珀，其余保持语义色相、按暗底提亮 */
+      '--dsw-alias-state-business-primary': 'rgb(245, 158, 11)',
+      '--dsw-alias-state-business-tertiary': 'rgba(245, 158, 11, 0.16)',
+      '--dsw-alias-state-error-primary': 'rgb(242, 90, 90)',
+      '--dsw-alias-state-error-secondary': 'rgb(248, 122, 122)',
+      '--dsw-alias-state-success-primary': 'rgb(74, 222, 128)',
+      '--dsw-alias-state-success-secondary': 'rgb(110, 231, 183)',
+      '--dsw-alias-state-success-tertiary': 'rgba(34, 197, 94, 0.16)',
+      '--dsw-alias-state-warn-label': 'rgb(221, 134, 41)',
+      '--dsw-alias-state-warn-primary': 'rgb(245, 158, 11)',
+      '--dsw-alias-state-warn-secondary': 'rgb(251, 176, 34)',
+      '--dsw-alias-state-warn-tertiary': 'rgba(245, 158, 11, 0.16)',
+
+      /* 浮层：高不透明度保证可读性 */
+      '--dsw-alias-toast-bg': 'rgba(18, 21, 36, 0.92)',
+      '--dsw-alias-tooltip-bg': 'rgba(22, 25, 42, 0.94)',
+
+      /* 专项表面 */
+      '--dsw-specific-bubble-highlight': 'rgba(245, 158, 11, 0.15)',
+      '--dsw-specific-bubble': 'rgba(24, 28, 47, 0.58)',
+      '--dsw-specific-input-major': 'rgba(10, 12, 22, 0.66)',
+      '--dsw-specific-login-input': 'rgba(10, 12, 22, 0.66)',
+      '--dsw-specific-menu': 'rgba(16, 19, 33, 0.88)',
+      '--dsw-specific-selector': 'rgba(15, 18, 31, 0.7)',
+      '--dsw-specific-sidebar-fill': 'rgba(7, 9, 17, 0.52)',
+      '--dsw-specific-sidebar-nav-item-active-accent': 'rgba(245, 158, 11, 0.20)',
+      '--dsw-specific-sidebar-nav-item-active': 'rgba(255, 255, 255, 0.10)',
+      '--dsw-specific-sidebar-nav-item-hover': 'rgba(255, 255, 255, 0.07)',
+      '--dsw-specific-tip': 'rgba(18, 21, 36, 0.9)',
     }
 
     /**
-     * 客户端插件体：注册主题与设置行，协调持久化开关与主题偏好，
-     * 并按激活状态同步 DOM 视觉。
+     * overrideTokens 契约要求每令牌给出 { light, dark } 双表（裸字符串会抛
+     * 教学性错误）；黑洞为单套深空色，两档填同一值，使浅色/深色/跟随系统
+     * 任一档下覆盖层渲染一致。
+     */
+    const TOKENS = Object.fromEntries(
+      Object.entries(PALETTE).map(([name, value]) => [name, { light: value, dark: value }]),
+    )
+
+    /**
+     * 客户端插件体：叠令牌覆盖层、断言深色渲染基调、挂载结构层视觉，
+     * 卸载时全部还原。
      * @param {import('@deepseek-ai/cordis').Context} ctx - 客户端 cordis 上下文。
      */
     function apply(ctx) {
-      // 主题注册：卸载时 ThemeRuntime 自动把占用中的偏好重置为默认
-      ctx.effect(() => ctx.theme.register(THEME_DEFINITION), 'theme-blackhole: theme registration')
-
-      // 设置表单：本插件条目承载开关的持久化，默认 decode 按 Host 的 Config
-      // schema 校验解析；远程浏览器自动降级为进程内（memory 模式）
-      const form = ctx.configForms.get(SETTINGS_NAMESPACE)
-
-      // ui-theme 的只读观察：adopt 碾压把偏好压回持久化值且 section 不变；
-      // 用户在外观行主动切换会真实改变 section.preference
-      const uiThemeForm = ctx.configForms.get(UI_THEME_NAMESPACE)
-
-      let active = false
+      let disposed = false
       let scriptLoading = false
-      // 最近的内置偏好：关闭开关时恢复它；黑洞偏好不落盘 ui-theme 的 Config，
-      // 用户的浅色/深色/跟随系统选择不会因开关而丢失
-      let lastBuiltin
-      // 最近见到的 ui-theme 持久化偏好（仲裁基准；首次观察只记录不判定）
-      let lastPersisted
-      // 让位写回 enabled=false 尚未落盘的窗口：抑制一切重新断言
-      let pendingOff = false
-      // 设置行 store 的本地单调计数（store 由本插件 form 驱动）
-      let rowRevision = 0
 
-      /**
-       * 按激活状态同步 DOM：html 属性、样式表 link 与 WebGL 渲染器。
-       * 两条路径都幂等（start/stop 幂等、移除操作空转安全），不设早退：
-       * Host 首屏引导注入而客户端判定为关的边缘情况也必须能清理残留。
-       * @param {boolean} on - 黑洞主题是否激活。
-       */
-      const syncDom = (on) => {
-        active = on
-        if (on) {
-          document.documentElement.setAttribute(MARK, '')
-          // Host 首屏引导可能已注入同一 link（携带标记），认领而非重复插入
-          if (document.querySelector(`link[${MARK}]`) === null) {
-            const link = document.createElement('link')
-            link.rel = 'stylesheet'
-            link.href = STYLE_URL
-            link.setAttribute(MARK, '')
-            document.head.appendChild(link)
-          }
-          if (window.DshBlackhole !== undefined) {
-            window.DshBlackhole.start()
-          } else if (!scriptLoading) {
-            scriptLoading = true
-            const script = document.createElement('script')
-            script.src = SCRIPT_URL
-            script.onload = () => {
-              scriptLoading = false
-              // 加载完成前已被切走则不启动
-              if (active && window.DshBlackhole !== undefined) window.DshBlackhole.start()
-            }
-            script.onerror = () => { scriptLoading = false }
-            document.head.appendChild(script)
-          }
-        } else {
-          document.documentElement.removeAttribute(MARK)
-          const link = document.querySelector(`link[${MARK}]`)
-          if (link !== null) link.remove()
-          if (window.DshBlackhole !== undefined) window.DshBlackhole.stop()
+      // 1. 令牌覆盖层：叠在当前主题之上，卸载随纤维回收自动移除并还原
+      ctx.effect(() => ctx.theme.overrideTokens(SOURCE, TOKENS), 'theme-blackhole: token overlay')
+
+      // 2. 深色渲染基调：ThemePresenter 每次发布按偏好重写 color-scheme 与
+      //    暗色基底属性，本监听器运行于其后重新断言为 dark（只改呈现）。
+      //    已覆盖令牌之外的基底令牌需要暗色基底兜底，否则浅色偏好下露浅色底
+      const assertDarkChrome = () => {
+        if (disposed) return
+        document.documentElement.style.colorScheme = 'dark'
+        document.body.setAttribute(DARK_ATTRIBUTE, '')
+      }
+      assertDarkChrome()
+      ctx.on('theme/change', assertDarkChrome)
+
+      // 3. 结构层：html 门控属性 + 样式表 + WebGL 渲染器。
+      //    Host 首屏引导可能已注入同一 link（携带标记），认领而非重复插入
+      document.documentElement.setAttribute(MARK, '')
+      if (document.querySelector(`link[${MARK}]`) === null) {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = STYLE_URL
+        link.setAttribute(MARK, '')
+        document.head.appendChild(link)
+      }
+      if (window.DshBlackhole !== undefined) {
+        window.DshBlackhole.start()
+      } else if (!scriptLoading) {
+        scriptLoading = true
+        const script = document.createElement('script')
+        script.src = SCRIPT_URL
+        script.setAttribute(MARK, '')
+        script.onload = () => {
+          scriptLoading = false
+          // 加载完成前插件已卸载则不启动
+          if (!disposed && window.DshBlackhole !== undefined) window.DshBlackhole.start()
         }
+        script.onerror = () => { scriptLoading = false }
+        document.head.appendChild(script)
       }
 
-      /** 恢复到最近的内置偏好（注册表已不含它时回退跟随系统）。 */
-      const restoreBuiltin = () => {
-        const registered = ctx.theme.getTheme().themes
-        const target = lastBuiltin !== undefined && registered.some((theme) => theme.id === lastBuiltin)
-          ? lastBuiltin
-          : 'system'
-        ctx.theme.setTheme(target)
-      }
-
-      /**
-       * 以持久化开关为准协调主题偏好与设置行：开关镜像进 store；开则在偏好被
-       * 压回持久化内置值（adopt 碾压的签名）时重新断言黑洞，关且正占用偏好则
-       * 交还。与持久化值不同的偏好是用户尚未落盘的主动切换，交给仲裁让位。
-       */
-      const reconcile = () => {
-        const section = form.getSnapshot().value
-        if (section === undefined) return
-        if (!section.enabled) pendingOff = false
-        if (bound !== undefined) bound.sync(section.enabled, ++rowRevision)
-        const preference = ctx.theme.getTheme().preference
-        if (section.enabled) {
-          if (!pendingOff && preference !== THEME_ID && preference === lastPersisted) {
-            ctx.theme.setTheme(THEME_ID)
-          }
-        } else if (preference === THEME_ID) {
-          restoreBuiltin()
-        }
-      }
-      ctx.effect(() => form.subscribe(reconcile), 'theme-blackhole: settings adoption')
-
-      /**
-       * 仲裁偏好归属：ui-theme 持久化偏好变化 = 用户在外观行主动切换，让位并
-       * 回写开关为关；section 不变而偏好被压离黑洞 = 共享镜像全量重读引发的
-       * adopt 碾压，重新断言（与碾压同在同一个同步发布段，两次 DOM 翻转之间
-       * 无绘制）。已知边界：黑洞激活时点击恰好等于持久化值的内置主题会被视为
-       * 碾压而覆盖，需用开关关闭——不改动 dsh 前提下该场景无法区分。
-       */
-      ctx.effect(() => uiThemeForm.subscribe(() => {
-        const section = uiThemeForm.getSnapshot().value
-        if (section === undefined) return
-        if (lastPersisted === undefined) {
-          // 首次观察：只记录基准，不判定为用户切换
-          lastPersisted = section.preference
-        } else if (section.preference !== lastPersisted) {
-          lastPersisted = section.preference
-          if (form.getSnapshot().value?.enabled === true) {
-            pendingOff = true
-            void form.set(ENABLED_FIELD, false)
-          }
-          return
-        }
-        if (!pendingOff
-          && form.getSnapshot().value?.enabled === true
-          && ctx.theme.getTheme().preference !== THEME_ID) {
-          ctx.theme.setTheme(THEME_ID)
-        }
-      }), 'theme-blackhole: ui-theme adoption arbitration')
-
-      // 设置行 store：持久化开关的镜像，reconcile（本插件 form 订阅）是唯一写者
-      const store = defineStore({
-        init: () => ({ enabled: false, revision: -1 }),
-        actions: {
-          sync: (draft, on, revision) => {
-            if (revision <= draft.revision) return
-            draft.enabled = on
-            draft.revision = revision
-          },
-        },
-      })
-      let bound
-
-      // 偏好变化驱动 DOM 与 lastBuiltin。切离黑洞不在此回写开关：adopt 碾压与
-      // 用户主动切换在该方向上无法区分，交给仲裁；切向黑洞则方向无歧义——
-      // 偏好只在显式 setTheme(THEME_ID) 后才会是黑洞（ui-theme 的 schema 不允许
-      // 黑洞落盘，碾压永远压向内置值），故开关为关时必是外部激活（如插件市场），
-      // 回写开关为开，设置行经 reconcile 同步；让位窗口内的外部激活视为新的
-      // 开启手势，终结该窗口
-      ctx.on('theme/change', (snapshot) => {
-        if (snapshot.preference !== THEME_ID) {
-          lastBuiltin = snapshot.preference
-          syncDom(false)
-          return
-        }
-        syncDom(true)
-        if (form.getSnapshot().value?.enabled !== true) {
-          pendingOff = false
-          void form.set(ENABLED_FIELD, true)
-        }
-      })
-
-      // 开关手势：立即切换主题，并持久化开关状态（远程浏览器进程内生效）；
-      // 手动手势终结让位窗口
-      const setEnabled = (on) => {
-        pendingOff = false
-        void form.set(ENABLED_FIELD, on)
-        if (on) ctx.theme.setTheme(THEME_ID)
-        else restoreBuiltin()
-      }
-
-      ctx.effect(() => ctx.locale.register(LOCALE_NS, { zh, en }), 'theme-blackhole: row dictionaries')
-      ctx.effect(() => {
-        const style = document.createElement('style')
-        style.dataset.plugin = 'dsh-theme-blackhole'
-        style.textContent = ROW_CSS
-        document.head.appendChild(style)
-        return () => { style.remove() }
-      }, 'theme-blackhole: row style')
-
-      ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-        name: 'settings.general.item',
-        id: 'theme-blackhole',
-        order: 20,
-        store,
-        locale: LOCALE_NS,
-        inject: (actions) => {
-          bound = actions
-          // 从 form 重新同步，不丢注册与首渲染之间的变化（revision 守卫去重）
-          bound.sync(form.getSnapshot().value?.enabled === true, ++rowRevision)
-          return { setEnabled }
-        },
-      }, BlackholeRow))
-
-      // 应用当前状态（晚于内置插件激活的组成里，form 可能已就绪）
-      const snapshot = ctx.theme.getTheme()
-      if (snapshot.preference !== THEME_ID) lastBuiltin = snapshot.preference
-      syncDom(snapshot.preference === THEME_ID)
-      reconcile()
-
-      // 最后注册卸载回收：逆序处置时最先执行，摘除本主题的全部 DOM 痕迹
-      ctx.effect(() => () => { syncDom(false) }, 'theme-blackhole: teardown')
+      // 卸载回收：还原渲染基调到当前偏好解析结果，摘除全部 DOM 痕迹。
+      // disposed 先于覆盖层移除置位，使移除发布的 theme/change 不再触发断言；
+      // 无论纤维内各 effect 的处置顺序如何，最终状态都收敛到偏好本真值
+      ctx.effect(() => () => {
+        disposed = true
+        const scheme = ctx.theme.getTheme().active.colorScheme
+        document.documentElement.style.colorScheme = scheme
+        if (scheme === 'dark') document.body.setAttribute(DARK_ATTRIBUTE, '')
+        else document.body.removeAttribute(DARK_ATTRIBUTE)
+        document.documentElement.removeAttribute(MARK)
+        const link = document.querySelector(`link[${MARK}]`)
+        if (link !== null) link.remove()
+        const script = document.querySelector(`script[${MARK}]`)
+        if (script !== null) script.remove()
+        if (window.DshBlackhole !== undefined) window.DshBlackhole.stop()
+      }, 'theme-blackhole: teardown')
     }
 
     /** 客户端半边依赖的服务（与 package.json dsh.client.inject 的包一一对应）。 */
-    const inject = ['theme', 'slots', 'locale', 'connection', 'remote', 'configForms']
+    const inject = ['theme']
 
     return { inject, apply }
   },

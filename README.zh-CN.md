@@ -3,11 +3,11 @@
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![Version](https://img.shields.io/badge/version-0.1.7-green)
+![Version](https://img.shields.io/badge/version-0.2.0-green)
 
 [English](README.md) | 中文
 
-DeepSeek Harness（dsh）Web UI 的黑洞主题插件：以 WebGL 实时光线追踪的史瓦西黑洞作为应用背景，配合深空玻璃质感的面板调色板，从 设置 > 通用 > 主题-黑洞 一键切换。
+DeepSeek Harness（dsh）Web UI 的黑洞主题插件：以 WebGL 实时光线追踪的史瓦西黑洞作为应用背景，配合深空玻璃质感的面板调色板。无开关：插件加载即启用，禁用或卸载插件即无残留还原默认主题。
 
 ![hero](docs/screenshots/blackhole.png)
 
@@ -15,14 +15,14 @@ DeepSeek Harness（dsh）Web UI 的黑洞主题插件：以 WebGL 实时光线�
 
 - **WebGL 史瓦西黑洞背景**：零测地线光线追踪实时渲染引力透镜、吸积盘与光子环，相机缓慢自动环绕
 - **深空玻璃面板**：半透明深色令牌覆写 + 毛玻璃模糊，黑洞从内容之下柔焦透出，品牌强调色改为吸积盘琥珀
-- **一等公民主题**：注册进主题运行时，设置行开关与外观设置双向同步、状态持久化，首屏无闪烁
+- **令牌覆盖层、加载即启用**：调色板经主题服务的令牌覆盖层（`ctx.theme.overrideTokens`）叠在当前主题之上，与 浅色/深色/跟随系统 偏好通道正交——不读写外观偏好，卸载插件即自动还原；首屏注入避免闪默认主题
 - **性能友好且优雅降级**：半分辨率渲染、30fps 限速、遵循系统减少动态偏好，WebGL 不可用时透出纯黑深空底色
 
 ## 安装
 
 本插件依赖 web profile 的 webServer 服务，仅适用于含 webserver 的 profile（如 web）， **不要装进 headless**。
 
-要求 dsh ≥ 0.1.7：0.1.7 起设置服务重写为插件 Config 投影体系，移除了旧版的 settings 命名空间 API（`settings.register` / `settings.get`），旧版 dsh 请使用本插件的 0.1.0 版本。
+要求 dsh ≥ 0.1.0-rc.7（该版本起主题服务提供令牌覆盖层 `ctx.theme.overrideTokens`）。本插件 0.1.x（带设置开关的旧版）要求 dsh ≥ 0.1.7。
 
 ```bash
 dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
@@ -30,11 +30,10 @@ dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
 
 ## 使用
 
-安装并启动后，进入 **设置 > 通用 > 主题-黑洞**：
+没有设置开关：插件加载即启用黑洞主题。
 
-- **打开开关**：切换到黑洞主题，开关状态持久化，刷新或重启后仍保持
-- **关闭开关**：恢复到你之前使用的内置主题（浅色 / 深色 / 跟随系统），原有偏好不会丢失
-- **从外观行切走**：在外观设置中切回内置主题时，开关自动回写为关，两处设置始终一致
+- **关闭**：禁用或卸载插件（`dsh plugin --profile web remove dsh-theme-blackhole`），令牌覆盖层随之回收，DOM 痕迹全部摘除，你原有的外观偏好（浅色 / 深色 / 跟随系统）原样恢复
+- **外观设置**：浅色/深色/跟随系统偏好仍可自由切换，黑洞调色板在任一档下渲染一致
 
 ## 工作原理
 
@@ -44,18 +43,19 @@ dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
 
 | 部分       | 文件                   | 职责                                                                                                                  |
 |------------|------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| Host 半边  | `src/index.js`         | 服务 `/blackhole/*` 静态资源（按请求读盘）；以 Config schema 声明 `enabled` 开关（volatile，设置表单按条目 id `theme-blackhole` 投影）；开关为开时向 index.html 注入首屏引导 |
-| 客户端半边 | `src/client/index.js`  | 免构建 client bundle：把黑洞主题注册进 ThemeRuntime，注册设置行，按主题激活状态启停 DOM 视觉                          |
-| 调色板     | `assets/blackhole.css` | `html[data-dsh-blackhole]` 门控的 `--dsw-*` 设计令牌覆写                                                              |
+| Host 半边  | `src/index.js`         | 服务 `/blackhole/*` 静态资源（按请求读盘）；无条件向 index.html 注入首屏引导，首屏不闪默认主题 |
+| 客户端半边 | `src/client/index.js`  | 免构建 client bundle：经 `ctx.theme.overrideTokens` 叠调色板覆盖层、在偏好解析结果之上断言深色渲染基调、挂载画布/毛玻璃结构层 |
+| 结构层     | `assets/blackhole.css` | `html[data-dsh-blackhole]` 门控的画布层、`#root` 毛玻璃、降级底色与 shiki 令牌（`--dsw-*` 调色板在令牌覆盖层中）                                                              |
 | 渲染器     | `assets/blackhole.js`  | 史瓦西黑洞 WebGL 渲染器，仅暴露 `window.DshBlackhole = { start, stop }` 控制器                                        |
 
 ### 首屏引导与门控机制
 
-主题的全部视觉由 `html` 元素上的 `data-dsh-blackhole` 属性门控：属性存在时调色板覆写生效，移除后默认调色板完整恢复，无残留。
+主题的结构层视觉由 `html` 元素上的 `data-dsh-blackhole` 属性门控：属性存在时画布层、毛玻璃与 shiki 令牌生效，移除后完整还原，无残留。
 
-- 开关持久化为开时，Host 半边在 `</head>` 前注入激活标记、样式表与 defer 的渲染器脚本，避免客户端插件加载前闪默认主题；开关为关时不注入任何东西
-- 客户端半边激活时认领导航中已存在的资源标签（携带同名标记），不重复插入；渲染器脚本只定义控制器，由客户端按 `theme/change` 事件幂等地 start/stop
-- 黑洞主题 id 不进入 ui-theme 的内置设置 schema，开关持久化在插件自身 Config 的 `theme-blackhole.enabled` 字段（dsh ≥ 0.1.7 的设置体系把活跃插件的 Config 投影成设置表单，客户端经 `configForms` 读写）——这是 dsh 对第三方主题保留的边界
+- Host 半边无条件在 `</head>` 前注入激活标记、样式表与 defer 的渲染器脚本，首屏不闪默认主题；客户端加载时认领已存在的资源标签（携带同名标记），不重复插入
+- 调色板不在 CSS 中：客户端经 `ctx.theme.overrideTokens('blackhole', tokens)` 把令牌叠成覆盖层，由主题运行时以 body 内联变量写入并折叠进每次 `theme/change` 快照。覆盖层与 浅色/深色/跟随系统 偏好通道正交——不注册主题 id、不读写偏好——卸载插件时覆盖层自动回收
+- 黑洞为单套深空色、在任一偏好档下渲染一致，客户端在每次 `theme/change` 后断言深色渲染基调（内联 `color-scheme: dark` 与暗色基底属性）——只写呈现、不碰持久化偏好——卸载时按偏好解析结果还原
+- 渲染器脚本只定义 `window.DshBlackhole` 控制器，由客户端幂等 start；卸载时 stop（取消 RAF、销毁 GL 上下文、移除画布层）
 
 ### 黑洞渲染器（`assets/blackhole.js`）
 
@@ -103,7 +103,7 @@ d^2u/dphi^2 = 1.5 u^2 - u
 
 ### 深空玻璃调色板（`assets/blackhole.css`）
 
-全部规则由 `html[data-dsh-blackhole]` 门控，覆写 Web UI 的 `--dsw-*` 设计令牌：
+调色板以令牌覆盖层的形式覆写 Web UI 的 `--dsw-*` 设计令牌（经 `ctx.theme.overrideTokens` 叠放，每令牌对浅/深两档给出同值）；`assets/blackhole.css` 中的结构规则由 `html[data-dsh-blackhole]` 门控：
 
 - 画布层 `z-index: 0` 位于 body 背景之上、`#root` 之下；`#root` 施加 `backdrop-filter: blur(16px)`，半透明面板透过模糊后的黑洞看到柔焦深空
 - 背景令牌改为分层半透明玻璃，越靠上的层（菜单、弹层、Toast）越不透明，保证可读性
