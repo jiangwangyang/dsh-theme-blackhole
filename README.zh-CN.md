@@ -45,7 +45,7 @@ dsh plugin --profile web add github:jiangwangyang/dsh-theme-blackhole
 |------------|------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | Host 半边  | `src/index.js`         | 服务 `/blackhole/*` 静态资源（按请求读盘）；无条件向 index.html 注入首屏引导，首屏不闪默认主题 |
 | 客户端半边 | `src/client/index.js`  | 免构建 client bundle：经 `ctx.theme.overrideTokens` 叠调色板覆盖层、在偏好解析结果之上断言深色渲染基调、挂载画布/毛玻璃结构层 |
-| 结构层     | `assets/blackhole.css` | `html[data-dsh-blackhole]` 门控的画布层、`#root` 毛玻璃、降级底色与 shiki 令牌（`--dsw-*` 调色板在令牌覆盖层中）                                                              |
+| 结构层     | `assets/blackhole.css` | `html[data-dsh-blackhole]` 门控的画布层（自带柔焦与降级底色）、body 背景透明化与 shiki 令牌（`--dsw-*` 调色板在令牌覆盖层中）                                                              |
 | 渲染器     | `assets/blackhole.js`  | 史瓦西黑洞 WebGL 渲染器，仅暴露 `window.DshBlackhole = { start, stop }` 控制器                                        |
 
 ### 首屏引导与门控机制
@@ -98,15 +98,15 @@ d^2u/dphi^2 = 1.5 u^2 - u
 - 渲染分辨率为 `0.5 x devicePixelRatio`（上限 2）倍窗口尺寸，半分辨率渲染兼顾性能与清晰度，由浏览器放大撑满全屏
 - RAF 循环限速 30fps，只跳渲染不跳计时，环绕速度不受影响
 - 系统开启减少动态偏好时仅渲染一帧静态画面，不启动循环
-- WebGL 不可用或着色器编译失败时隐藏画布层，由 body 上的降级底色（纯黑 + 微弱吸积盘橙晕）透出
+- WebGL 不可用或着色器编译失败时只移除画布，画布层保留，其自带的纯黑深空降级底色透出
 - stop 时取消 RAF、主动 `loseContext` 销毁 GL 上下文并移除画布层，不留痕迹
 
 ### 深空玻璃调色板（`assets/blackhole.css`）
 
 调色板以令牌覆盖层的形式覆写 Web UI 的 `--dsw-*` 设计令牌（经 `ctx.theme.overrideTokens` 叠放，每令牌对浅/深两档给出同值）；`assets/blackhole.css` 中的结构规则由 `html[data-dsh-blackhole]` 门控：
 
-- 画布层 `z-index: -1` 沉到 body 背景与全部应用内容之下——不接触任何官方挂载节点，弹层/菜单/Toast 的排序语义不受影响；画布层自带降级底色与 `filter: blur(16px)` 柔焦，半透明面板透过它看到柔焦黑洞
-- 背景令牌改为分层半透明玻璃，越靠上的层（菜单、弹层、Toast）越不透明，保证可读性
+- 画布层 `z-index: -1` 沉到 body 与全部应用内容之下——不接触任何官方挂载节点，弹层/菜单/Toast 的排序语义不受影响；画布层自带降级底色与 `filter: blur(16px)` 柔焦，半透明面板透过它看到柔焦黑洞
+- 背景令牌改为分层半透明玻璃，越靠上的层（菜单、弹层、Toast）越不透明，保证可读性；其中 `--dsw-alias-bg-base` 取全透明——应用外壳的多个全高容器（AppFrame、centerCol、会话骨架）会嵌套叠刷它，任一非零 alpha 都会复合成黑色遮罩盖住画布层，门控样式同时把 body 背景改透明作为双保险
 - 品牌与交互强调色改为吸积盘琥珀（`rgb(245, 158, 11)`），文字为蓝白冷调梯度
 - 同时设定 shiki 暗色代码高亮令牌，代码块使用近乎不透明的夜空底
 
@@ -121,7 +121,7 @@ d^2u/dphi^2 = 1.5 u^2 - u
 │   └── client
 │       └── index.js      # 客户端半边（免构建）
 └── assets
-    ├── blackhole.css     # 深空玻璃调色板
+    ├── blackhole.css     # 结构层样式（门控、画布层、柔焦、降级底色）
     └── blackhole.js      # WebGL 黑洞渲染器
 ```
 

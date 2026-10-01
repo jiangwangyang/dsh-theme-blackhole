@@ -45,7 +45,7 @@ The plugin consists of a host side and a client side, plus two static assets:
 |-------------|------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Host side   | `src/index.js`         | Serves `/blackhole/*` static assets (read from disk per request); unconditionally injects boot assets into index.html so the first paint never flashes the default theme |
 | Client side | `src/client/index.js`  | Build-free client bundle: stacks the palette through `ctx.theme.overrideTokens`, asserts a dark rendering baseline over whatever the preference resolves to, and mounts the canvas/blur structure layer |
-| Structure   | `assets/blackhole.css` | Canvas layer, `#root` backdrop blur, fallback backdrop and shiki tokens gated by `html[data-dsh-blackhole]` (the `--dsw-*` palette lives in the token override layer)                                                                                                            |
+| Structure   | `assets/blackhole.css` | Canvas layer (built-in soft focus and fallback backdrop), body background neutralization and shiki tokens gated by `html[data-dsh-blackhole]` (the `--dsw-*` palette lives in the token override layer)                                                                                                            |
 | Renderer    | `assets/blackhole.js`  | Schwarzschild black hole WebGL renderer, exposing only the `window.DshBlackhole = { start, stop }` controller                                                                   |
 
 ### Boot Injection and Gating
@@ -98,15 +98,15 @@ Integration terminates in three ways:
 - The render resolution is `0.5 x devicePixelRatio` (capped at 2) times the window size — half-resolution rendering balances performance and clarity, with the browser upscaling to fullscreen
 - The RAF loop is capped at 30fps; it skips rendering but not timing, so the orbit speed is unaffected
 - When the system reduced-motion preference is on, only a single static frame is rendered and the loop never starts
-- If WebGL is unavailable or shader compilation fails, the canvas layer is hidden and the fallback backdrop on body (pure black with a faint accretion-disk amber halo) shows through
+- If WebGL is unavailable or shader compilation fails, only the canvas is removed; the layer stays and its own pure-black deep-space fallback backdrop shows through
 - On stop, the RAF is cancelled, the GL context is proactively destroyed via `loseContext`, and the canvas layer is removed without a trace
 
 ### The Deep-Space Glass Palette (`assets/blackhole.css`)
 
 The palette is delivered as a token override layer over the Web UI's `--dsw-*` design tokens (stacked via `ctx.theme.overrideTokens`, each token supplying the same value for both palette modes); the structural rules in `assets/blackhole.css` are gated by `html[data-dsh-blackhole]`:
 
-- The canvas layer sits at `z-index: -1`, sunk below the body background and all app content — no official mount node is touched, and overlay/menu/toast ordering is unaffected; the layer carries its own fallback backdrop and a `filter: blur(16px)` soft focus, so translucent panels see a soft-focused black hole
-- Background tokens become layered translucent glass; higher layers (menus, popovers, toasts) are more opaque to preserve readability
+- The canvas layer sits at `z-index: -1`, sunk below the body and all app content — no official mount node is touched, and overlay/menu/toast ordering is unaffected; the layer carries its own fallback backdrop and a `filter: blur(16px)` soft focus, so translucent panels see a soft-focused black hole
+- Background tokens become layered translucent glass; higher layers (menus, popovers, toasts) are more opaque to preserve readability. `--dsw-alias-bg-base` is fully transparent: several full-height app-shell containers (AppFrame, center column, conversation skeleton) paint it in nested stacks, and any non-zero alpha would compound into a black scrim over the canvas; the gated stylesheet also neutralizes the body background as a safeguard
 - Brand and interactive accents become accretion-disk amber (`rgb(245, 158, 11)`), with a cool blue-white text gradient
 - Shiki dark code-highlighting tokens are set as well; code blocks use a nearly opaque night-sky base
 
@@ -121,7 +121,7 @@ The palette is delivered as a token override layer over the Web UI's `--dsw-*` d
 │   └── client
 │       └── index.js      # client side (build-free)
 └── assets
-    ├── blackhole.css     # deep-space glass palette
+    ├── blackhole.css     # structure layer (gating, canvas layer, soft focus, fallback)
     └── blackhole.js      # WebGL black hole renderer
 ```
 

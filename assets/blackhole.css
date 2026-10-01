@@ -9,8 +9,11 @@
    层叠模型（不依赖任何官方内部节点）：
      html 背景（最底层兜底）
        → #dsh-blackhole-layer（z-index:-1：自带底色 + 柔焦的画布层）
-         → body 背景与全部应用内容（含 body 下的弹层 portal）
-   应用内容无需任何抬升，弹层/菜单/Toast 的排序语义不受影响。
+         → body（门控下背景透明）与全部应用内容（含 body 下的弹层 portal）
+   应用外壳的多个全高容器（AppFrame、centerCol、会话骨架）会嵌套叠刷
+   --dsw-alias-bg-base，任一非零 alpha 都会复合成黑色遮罩盖住画布层，
+   故该令牌取全透明（见 src/client/index.js）。弹层/菜单/Toast 的
+   排序语义不受影响。
    ========================================== */
 
 /* 深色渲染基调 + shiki 暗色代码高亮。
@@ -34,6 +37,14 @@ html[data-dsh-blackhole] {
 /* 页面最底层兜底：画布层尚未创建（脚本未加载）时透出纯黑深空 */
 html[data-dsh-blackhole] {
   background: #030309;
+}
+
+/* 抵消叠层压暗：新版应用外壳的 body 会整页刷一层 bg-base（半透明黑），
+   与 AppFrame/会话骨架等全高容器的同名背景层层嵌套，复合成厚重的黑色
+   遮罩盖住画布层。此处把 body 背景改透明，bg-base 令牌本身也已取
+   全透明（详见 src/client/index.js 调色板注释），画布层零压暗透出 */
+html[data-dsh-blackhole] body {
+  background: transparent;
 }
 
 /* 黑洞画布层：fixed 负层级沉到全部内容之下，不拦截指针；
