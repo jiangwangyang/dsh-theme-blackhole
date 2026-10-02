@@ -39,10 +39,11 @@ window.__ModuleLoader__.load({
      * blackhole.js 的 WebGL 黑洞背景从内容之下透出；品牌强调色为吸积盘琥珀。
      */
     const PALETTE = {
-      /* 背景：分层玻璃。bg-base 会被外壳 body 之外的多个全高容器
+      /* 背景：分层玻璃。bg-base 会被外壳的多个全高容器
          （AppFrame、centerCol、会话骨架）嵌套叠刷，任一非零 alpha 都会
-         复合成黑色遮罩盖住画布层，故取全透明——画布层直接透出，
-         压暗与可读性完全由 layer-1/2/3 及上方玻璃层承担 */
+         复合成黑色遮罩盖住画布层，故取全透明；整页压暗由 body 单独
+         刷一层黑纱承担（见 blackhole.css，body 只刷一次、不嵌套、
+         无复合问题），面板可读性由 layer-1/2/3 及上方玻璃层承担 */
       '--dsw-alias-bg-base': 'rgba(4, 5, 11, 0)',
       '--dsw-alias-bg-layer-1': 'rgba(9, 11, 20, 0.42)',
       '--dsw-alias-bg-layer-2': 'rgba(12, 15, 26, 0.52)',
