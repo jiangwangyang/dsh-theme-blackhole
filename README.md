@@ -15,12 +15,12 @@ A black hole theme plugin for the DeepSeek Harness (dsh) Web UI: a WebGL real-ti
 
 - **WebGL Schwarzschild black hole background**: null-geodesic ray tracing renders gravitational lensing, the accretion disk and the photon ring in real time, with a slow automatic camera orbit
 - **Deep-space glass panels**: translucent dark token overrides plus backdrop blur let the black hole show through softly behind the content; the brand accent becomes accretion-disk amber
-- **Token override layer, always on**: the palette stacks onto the active theme through the theme service's token override layer (`ctx.theme.overrideTokens`), orthogonal to the light/dark/system preference — the plugin never reads or writes the appearance preference, and unloading retracts the layer automatically; boot injection avoids flashing the default theme
+- **Token override layer, always on**: the palette stacks onto the active theme through the theme service's token override layer (`ctx.theme.overrideTokens`), orthogonal to the light/dark/system preference — the plugin never reads or writes the appearance preference, and unloading retracts the layer automatically; the stylesheet and renderer are inlined into the client bundle — no server routes, no index.html injection, no globals
 - **Performance-friendly with graceful degradation**: half-resolution rendering, 30fps cap, honors the system reduced-motion preference, and falls back to a pure-black deep-space backdrop when WebGL is unavailable
 
 ## Installation
 
-This plugin relies on the webServer service of a web profile. It only works with profiles that include a web server (such as web); **do not install it into headless profiles**.
+The theme is purely browser-side and has no host-side service dependencies.
 
 Requires dsh ≥ 0.1.0-rc.7 (the release that introduced the theme service's token override layer, `ctx.theme.overrideTokens`). Version 0.1.x of this plugin — the one with the settings toggle — requires dsh ≥ 0.1.7.
 
@@ -39,25 +39,24 @@ There is no settings toggle: the black hole theme is enabled as soon as the plug
 
 ### Overall Architecture
 
-The plugin consists of a host side and a client side, plus two static assets:
+The theme is purely browser-side: the host side is an empty implementation (the bundle loader imports every row's node half), and all logic lives in a single build-free client bundle:
 
-| Part        | File                   | Responsibility                                                                                                                                                                  |
-|-------------|------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Host side   | `src/index.js`         | Serves `/blackhole/*` static assets (read from disk per request); unconditionally injects boot assets into index.html so the first paint never flashes the default theme |
-| Client side | `src/client/index.js`  | Build-free client bundle: stacks the palette through `ctx.theme.overrideTokens`, asserts a dark rendering baseline over whatever the preference resolves to, and mounts the canvas/blur structure layer |
-| Structure   | `assets/blackhole.css` | Canvas layer (built-in soft focus and fallback backdrop), a page-wide body dimming veil and shiki tokens gated by `html[data-dsh-blackhole]` (the `--dsw-*` palette lives in the token override layer)                                                                                                            |
-| Renderer    | `assets/blackhole.js`  | Schwarzschild black hole WebGL renderer, exposing only the `window.DshBlackhole = { start, stop }` controller                                                                   |
+| Part        | Location | Responsibility |
+|-------------|----------|----------------|
+| Host side   | `src/index.js` | Empty implementation; exports only the stable plugin name |
+| Token layer | `PALETTE` / `TOKENS` (`src/client/index.js`) | Stacks the deep-space glass palette over the active theme through `ctx.theme.overrideTokens` |
+| Structure   | `STRUCTURE_CSS` (inlined stylesheet, formerly `assets/blackhole.css`) | Canvas layer (built-in soft focus and fallback backdrop), page-wide body dimming veil and shiki tokens gated by `html[data-dsh-blackhole]` |
+| Renderer    | `createBlackholeRenderer()` (inlined, formerly `assets/blackhole.js`) | Schwarzschild black hole WebGL renderer; the factory returns a closure-based `{ start, stop }` controller |
 
-### Boot Injection and Gating
+### Gating
 
 All structural visuals are gated by the `data-dsh-blackhole` attribute on the `html` element: while the attribute is present the canvas layer, backdrop blur and shiki tokens apply; removing it restores everything, leaving no residue.
 
-- The host side unconditionally injects the activation marker, the stylesheet and a deferred renderer script before `</head>`, so the first paint never flashes the default theme; on load the client side adopts the already-present resource tags (which carry the same marker) instead of inserting duplicates
+- The stylesheet and renderer are inlined into the client bundle and arrive with the client plugin — no static asset routes, no index.html injection, no `window` global controller; the trade-off is a possible brief flash of the default theme before the bundle loads
 - The palette does not live in CSS: the client stacks it through `ctx.theme.overrideTokens('blackhole', tokens)`, and the theme runtime writes the tokens as inline variables on `body`, folded into every `theme/change` snapshot. The layer is orthogonal to the light/dark/system preference — the plugin never registers a theme id nor reads/writes the preference — and unloading the plugin retracts the layer automatically
 - Because the black hole palette is a single deep-space scheme rendered under any preference, the client asserts a dark rendering baseline (inline `color-scheme: dark` and the dark base palette attribute) after every `theme/change` — a presentation-only write that never touches the stored preference — and restores the preference-resolved baseline on unload
-- The renderer script only defines the `window.DshBlackhole` controller; the client starts it idempotently and stops it (RAF cancel + GL context destruction + canvas removal) on unload
-
-### The Black Hole Renderer (`assets/blackhole.js`)
+- The renderer is a module-local closure; the client starts it on activation and stops it (RAF cancel + GL context destruction + canvas removal) on unload
+### The Black Hole Renderer (`createBlackholeRenderer`, inlined in `src/client/index.js`)
 
 For each pixel, the renderer casts a ray from the camera and performs null-geodesic (photon trajectory) ray tracing in Schwarzschild spacetime, entirely within the fragment shader.
 
@@ -101,9 +100,9 @@ Integration terminates in three ways:
 - If WebGL is unavailable or shader compilation fails, only the canvas is removed; the layer stays and its own pure-black deep-space fallback backdrop shows through
 - On stop, the RAF is cancelled, the GL context is proactively destroyed via `loseContext`, and the canvas layer is removed without a trace
 
-### The Deep-Space Glass Palette (`assets/blackhole.css`)
+### The Deep-Space Glass Palette (`PALETTE` token override layer + `STRUCTURE_CSS`)
 
-The palette is delivered as a token override layer over the Web UI's `--dsw-*` design tokens (stacked via `ctx.theme.overrideTokens`, each token supplying the same value for both palette modes); the structural rules in `assets/blackhole.css` are gated by `html[data-dsh-blackhole]`:
+The palette is delivered as a token override layer over the Web UI's `--dsw-*` design tokens (stacked via `ctx.theme.overrideTokens`, each token supplying the same value for both palette modes); the structural rules in the inlined `STRUCTURE_CSS` stylesheet are gated by `html[data-dsh-blackhole]`:
 
 - The canvas layer sits at `z-index: -1`, sunk below the body and all app content — no official mount node is touched, and overlay/menu/toast ordering is unaffected; the layer carries its own fallback backdrop and a `filter: blur(16px)` soft focus, so translucent panels see a soft-focused black hole
 - Background tokens become layered translucent glass; higher layers (menus, popovers, toasts) are more opaque to preserve readability. `--dsw-alias-bg-base` is fully transparent: several full-height app-shell containers (AppFrame, center column, conversation skeleton) paint it in nested stacks, and any non-zero alpha would compound into a black scrim over the canvas; page-wide dimming is instead carried by a single fixed-alpha dark veil the gated stylesheet paints on body — body paints once without nesting, so nothing compounds
@@ -116,13 +115,10 @@ The palette is delivered as a token override layer over the Web UI's `--dsw-*` d
 .
 ├── cordis.patch.yml      # bundle patch: declares the plugin id and name
 ├── package.json          # exports, dsh.bundle / dsh.client manifest
-├── src
-│   ├── index.js          # host side
-│   └── client
-│       └── index.js      # client side (build-free)
-└── assets
-    ├── blackhole.css     # structure layer (gating, canvas layer, soft focus, fallback)
-    └── blackhole.js      # WebGL black hole renderer
+└── src
+    ├── index.js          # host side (empty implementation)
+    └── client
+        └── index.js      # client side (build-free single-file bundle: palette + structure CSS + WebGL renderer)
 ```
 
 ## License

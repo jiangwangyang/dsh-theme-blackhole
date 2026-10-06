@@ -12,7 +12,6 @@
   },
   "files": [
     "src",
-    "assets",
     "cordis.patch.yml"
   ],
   "dsh": {
@@ -30,5 +29,5 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1"
   },
-  "description": "Black hole theme plugin for the DeepSeek Harness Web UI: WebGL Schwarzschild black hole background with deep-space glass panels. Enabled while installed (no toggle) — disable or remove the plugin to restore the default theme. Install into a web profile: dsh plugin --profile web add <path-to-this-package>"
+  "description": "Black hole theme plugin for the DeepSeek Harness Web UI: WebGL Schwarzschild black hole background with deep-space glass panels, all shipped inside the client bundle (no server routes, no index.html injection). Enabled while installed (no toggle) — disable or remove the plugin to restore the default theme. Install into a web profile: dsh plugin --profile web add <path-to-this-package>"
 }
