@@ -217,6 +217,20 @@ html[data-dsh-blackhole] body {
   background: rgba(3, 3, 9, 0.5);
 }
 
+/* Windows 桌面端专属修正：外壳 AppFrame 在 [data-windows-titlebar] 下给全窗
+   容器 .frame 刷 background: var(--dsw-specific-sidebar-fill)，本意是给圆角
+   内容区当窗口底色——官方主题该令牌近乎不透明，无感；黑洞的 sidebar-fill
+   是 rgba(7,9,17,0.52) 半透明，等于在 z-index:-1 的黑洞画布上再盖一层
+   52% 压暗，桌面端整窗因此比 Web 端暗（Web 端无该属性，规则不命中）。
+   这里只摘除该容器背景：侧边栏自身填充、顶部标题栏条带（.frame::before）
+   均不受影响。Web/macOS 端无 [data-windows-titlebar]，本规则为空操作。
+   注意：.frame 经 CSS Modules 编译为哈希类名（实测 #root > div >
+   div.BynINW_frame），只能按类名子串 '_frame' 匹配（兼容'哈希_名'与
+   '_名_哈希'两种编译格式）；若 dsh 升级后桌面端复现整窗偏暗，优先检查
+   本规则是否仍命中。 */
+html[data-dsh-blackhole][data-windows-titlebar] #root [class*='_frame'] {
+  background: transparent !important;
+}
 /* 黑洞画布层：fixed 负层级沉到全部内容之下，不拦截指针；
    自带降级底色（WebGL 失败时渲染器只移除画布，层保留，纯黑深空透出）；
    柔焦以 filter 施加在画布层自身，无需在任何应用容器上开 backdrop-filter；
